@@ -7,8 +7,50 @@
     <generator>Hugo -- gohugo.io</generator>
     <language>en-us</language>
     <copyright>Code released under the Apache 2.0 license.</copyright>
-    <lastBuildDate>Thu, 08 Oct 2015 12:36:02 +0700</lastBuildDate>
+    <lastBuildDate>Wed, 28 Oct 2015 14:31:10 +0700</lastBuildDate>
     <atom:link href="http://docker-saigon.github.io/index.xml" rel="self" type="application/rss+xml" />
+    
+    <item>
+      <title>about</title>
+      <link>http://docker-saigon.github.io/about/</link>
+      <pubDate>Wed, 28 Oct 2015 14:31:10 +0700</pubDate>
+      
+      <guid>http://docker-saigon.github.io/about/</guid>
+      <description>
+
+&lt;p&gt;Docker Saigon is the community of Docker users in Ho Chi Minh City, Vietnam.&lt;/p&gt;
+
+&lt;h2 id=&#34;where-can-you-find-us:6083a88ee3411b0d17ce02d738f69d47&#34;&gt;Where can you find us?&lt;/h2&gt;
+
+&lt;ul&gt;
+&lt;li&gt;&lt;a href=&#34;http://meetup.com/docker-saigon&#34;&gt;Meetup&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&#34;http://github.com/docker-saigon&#34;&gt;GitHub&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&#34;https://www.youtube.com/channel/UC1t_GbTJudAAK9Wqkg6-uLw&#34;&gt;Youtube&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&#34;http://www.facebook.com/DockerSaigon&#34;&gt;Facebook&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&#34;http://twitter.com/docker_saigon&#34;&gt;Twitter&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&#34;http://dockersaigon.herokuapp.com&#34;&gt;Slack (auto-invite app)&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&#34;http://dockersaigon.reddit.com&#34;&gt;Reddit&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&#34;docker:6083a88ee3411b0d17ce02d738f69d47&#34;&gt;Docker?&lt;/h2&gt;
+
+&lt;p&gt;&lt;a href=&#34;http://docker.com&#34;&gt;Docker&lt;/a&gt; is an open-source project to easily create lightweight, portable, self-sufficient containers from any application. The same container that a developer builds and tests on a laptop can run at scale, in production, on VMs, bare metal, OpenStack clusters, public clouds and more.&lt;/p&gt;
+
+&lt;p&gt;See our Docker Fundamentals live streaming at Lazada&amp;hellip; (link to video pending)&lt;/p&gt;
+
+&lt;p&gt;Thanks for reading!&lt;/p&gt;
+</description>
+    </item>
+    
+    <item>
+      <title>contact</title>
+      <link>http://docker-saigon.github.io/contact/</link>
+      <pubDate>Wed, 28 Oct 2015 22:17:33 +0700</pubDate>
+      
+      <guid>http://docker-saigon.github.io/contact/</guid>
+      <description>&lt;p&gt;Want to get in touch with us? Fill out the form below to send us a message and we will try to get back to you as soon as possible!&lt;/p&gt;
+</description>
+    </item>
     
     <item>
       <title>Welcome</title>

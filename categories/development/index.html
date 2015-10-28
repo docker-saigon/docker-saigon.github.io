@@ -9,18 +9,18 @@
     <meta name="description" content="">
     <meta name="author" content="">
 
-    <title>404 Page not found -- Docker Saigon</title>
+    <title>Development -- Docker Saigon</title>
 
     
-    <link href="http://docker-saigon.github.io/index.xml" rel="alternate" type="application/rss+xml" title="Docker Saigon" />
-    <link href="http://docker-saigon.github.io/index.xml" rel="feed" type="application/rss+xml" title="Docker Saigon" />
+    <link href="http://localhost:1313/categories/development/index.xml" rel="alternate" type="application/rss+xml" title="Docker Saigon" />
+    <link href="http://localhost:1313/categories/development/index.xml" rel="feed" type="application/rss+xml" title="Docker Saigon" />
     
 
     
-    <link href="http://docker-saigon.github.io/css/bootstrap.min.css" rel="stylesheet">
+    <link href="http://localhost:1313//css/bootstrap.min.css" rel="stylesheet">
 
     
-    <link href="http://docker-saigon.github.io/css/clean-blog.min.css" rel="stylesheet">
+    <link href="http://localhost:1313//css/clean-blog.min.css" rel="stylesheet">
 
     
     <link href="http://maxcdn.bootstrapcdn.com/font-awesome/4.1.0/css/font-awesome.min.css" rel="stylesheet" type="text/css">
@@ -46,7 +46,7 @@
                     <span class="icon-bar"></span>
                     <span class="icon-bar"></span>
                 </button>
-                <a class="navbar-brand" href="http://docker-saigon.github.io/">Docker Saigon</a>
+                <a class="navbar-brand" href="http://localhost:1313/">Docker Saigon</a>
             </div>
 
                        
@@ -54,19 +54,19 @@
                 <ul class="nav navbar-nav navbar-right">
                     
                     <li>
-                        <a href="http://docker-saigon.github.io/">home</a>
+                        <a href="http://localhost:1313/">home</a>
                     </li>
                     
                     <li>
-                        <a href="http://docker-saigon.github.io/about">about</a>
+                        <a href="http://localhost:1313/post/">Archives</a>
                     </li>
                     
                     <li>
-                        <a href="http://docker-saigon.github.io/post/">Archives</a>
+                        <a href="http://localhost:1313/about">About Docker Saigon</a>
                     </li>
                     
                     <li>
-                        <a href="http://docker-saigon.github.io/contact">contact</a>
+                        <a href="http://localhost:1313/post/welcome">Welcome</a>
                     </li>
                     
                   </ul>
@@ -79,14 +79,14 @@
 
 
     
-    <header class="intro-header" style="background-image: url('http://docker-saigon.github.io/img/home-bg.jpg')">
+    <header class="intro-header" style="background-image: url('http://localhost:1313//img/home-bg.jpg')">
      <div class="container">
        <div class="row">
          <div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
            <div class="site-heading">
-             <h1>Docker Saigon</h1>
+             <h1>Development</h1>
              <hr class="small">
-             <span class="subheading">Docker Saigon</span>
+             <span class="subheading"></span>
            </div>
          </div>
        </div>
@@ -95,16 +95,22 @@
 
     
     <div class="container">
-      <div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
-        <div class="post-preview">
-          <p class="post-meta"><a href="404.html">Index</a>
-            <br />
-          </p>
-        </div>
-        <div class="post-preview">
-          <p class="post-meta"><a href="http://docker-saigon.github.io/post/">Archives</a>
-            <br />
-          </p>
+      <div class="row">
+        <div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+          
+                             <div class="post-preview">
+                  <p class="post-meta"><a href="http://localhost:1313/post/welcome/">Welcome</a> on Thu, Oct 8, 2015
+                    <br />
+                    In <a href="http://localhost:1313/categories/development" >Development</a>, <a href="http://localhost:1313/categories/golang" >Golang</a>, 
+
+                    Tags <a href="http://localhost:1313/tags/blog" >blog</a> <a href="http://localhost:1313/tags/community" >community</a> <a href="http://localhost:1313/tags/hugo" >hugo</a> 
+
+                  </p>
+               </div>
+
+          
+          
+    
         </div>
       </div>
     </div>
@@ -160,13 +166,13 @@
     </footer>
 
     
-    <script src="http://docker-saigon.github.io/js/jquery.min.js"></script>
+    <script src="http://localhost:1313//js/jquery.min.js"></script>
 
     
-    <script src="http://docker-saigon.github.io/js/bootstrap.min.js"></script>
+    <script src="http://localhost:1313//js/bootstrap.min.js"></script>
 
     
-    <script src="http://docker-saigon.github.io/js/clean-blog.js"></script>
+    <script src="http://localhost:1313//js/clean-blog.js"></script>
 
     
 <script>
@@ -179,7 +185,10 @@
 </script>
 
 
-</body>
+<script data-no-instant>document.write('<script src="http://'
+        + (location.host || 'localhost').split(':')[0]
+		+ ':1313/livereload.js?mindelay=10"></'
+        + 'script>')</script></body>
 
 </html>
 

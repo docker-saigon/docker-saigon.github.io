@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Hugo on Docker Saigon</title>
+    <link>http://docker-saigon.github.io/tags/hugo/</link>
+    <description>Recent content in Hugo on Docker Saigon</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en-us</language>
+    <copyright>Code released under the Apache 2.0 license.</copyright>
+    <lastBuildDate>Thu, 08 Oct 2015 12:36:02 +0700</lastBuildDate>
+    <atom:link href="http://docker-saigon.github.io/tags/hugo/index.xml" rel="self" type="application/rss+xml" />
+    
+    <item>
+      <title>Welcome</title>
+      <link>http://docker-saigon.github.io/post/welcome/</link>
+      <pubDate>Thu, 08 Oct 2015 12:36:02 +0700</pubDate>
+      
+      <guid>http://docker-saigon.github.io/post/welcome/</guid>
+      <description>&lt;p&gt;This is the first post in Docker Saigon Blog. Let&amp;rsquo;s hope everything works as expected&lt;/p&gt;
+</description>
+    </item>
+    
+  </channel>
+</rss>
