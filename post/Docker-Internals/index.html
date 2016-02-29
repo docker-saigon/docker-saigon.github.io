@@ -1,0 +1,1404 @@
+<!DOCTYPE html>
+<html lang="en-us">
+
+<head>
+
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="">
+    <meta name="author" content="">
+
+    <title>Linux Container Internals -- Docker Saigon</title>
+
+    
+
+    
+    <link href="http://docker-saigon.github.io/css/bootstrap.min.css" rel="stylesheet">
+
+    
+    <link href="http://docker-saigon.github.io/css/clean-blog.min.css" rel="stylesheet">
+
+    
+    <link href="http://maxcdn.bootstrapcdn.com/font-awesome/4.1.0/css/font-awesome.min.css" rel="stylesheet" type="text/css">
+    <link href='http://fonts.googleapis.com/css?family=Lora:400,700,400italic,700italic' rel='stylesheet' type='text/css'>
+    <link href='http://fonts.googleapis.com/css?family=Open+Sans:300italic,400italic,600italic,700italic,800italic,400,300,600,700,800' rel='stylesheet' type='text/css'>
+
+    
+    
+    
+
+</head>
+
+<body>
+
+    
+    <nav class="navbar navbar-default navbar-custom navbar-fixed-top">
+        <div class="container-fluid">
+            
+            <div class="navbar-header page-scroll">
+                <button type="button" class="navbar-toggle" data-toggle="collapse" data-target="#bs-example-navbar-collapse-1">
+                    <span class="sr-only">Toggle navigation</span>
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                </button>
+                <a class="navbar-brand" href="http://docker-saigon.github.io/">Docker Saigon</a>
+            </div>
+
+                       
+            <div class="collapse navbar-collapse" id="bs-example-navbar-collapse-1">
+                <ul class="nav navbar-nav navbar-right">
+                    
+                    <li>
+                        <a href="http://docker-saigon.github.io/">home</a>
+                    </li>
+                    
+                    <li>
+                        <a href="http://docker-saigon.github.io/about/">about</a>
+                    </li>
+                    
+                    <li>
+                        <a href="http://docker-saigon.github.io/post/">Archive</a>
+                    </li>
+                    
+                    <li>
+                        <a href="http://docker-saigon.github.io/contact/">contact</a>
+                    </li>
+                    
+                  </ul>
+            </div>
+           
+
+        </div>
+        
+    </nav>
+
+
+    
+    
+    <header class="intro-header" style="background-image: url('http://docker-saigon.github.io//img/ship-schematics2.jpg')">
+      
+      <div class="container">
+        <div class="row">
+           <div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+             <div class="post-heading">
+               <h1>Linux Container Internals</h1>
+               <h2 class="subheading">A Deep Dive Into Linux Containers For Engineers Interested In The Gritty Details. </h2>
+               <span class="meta">Posted by <a href="#">Docker Saigon</a> on Mon, Feb 29, 2016
+                 <br />
+                 In <a href="http://docker-saigon.github.io/categories/internals" >Internals</a>, <a href="http://docker-saigon.github.io/categories/api" >API</a>, 
+
+                 <br />
+                 Tags <a href="http://docker-saigon.github.io/tags/lxc" >lxc</a> <a href="http://docker-saigon.github.io/tags/runc" >runc</a> <a href="http://docker-saigon.github.io/tags/containerd" >containerd</a> <a href="http://docker-saigon.github.io/tags/cgroups" >cgroups</a> <a href="http://docker-saigon.github.io/tags/iptables" >iptables</a> <a href="http://docker-saigon.github.io/tags/api" >api</a> 
+
+               </span>
+             </div>
+           </div>
+        </div>
+      </div>
+    </header>
+
+    
+    <article>
+        <div class="container">
+            <div class="row">
+                <div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+                  
+
+<p>This post was the basis for a joint event with the <a href="http://www.grokkingengineering.org/">grokking engineering</a> community in Saigon.</p>
+
+<p>The event was centered around DevOps, for our talk Docker Saigon needed to interest an engineering audience with how things tick on the inside of Docker. Audience experience with Docker and Linux operating systems was expected.</p>
+
+<p>Anyone interested to learn more about Docker, Full free hands-on-labs training events are scheduled for <sup>23</sup>&frasl;<sub>24</sub> March. For more details go to <a href="http://www.meetup.com/Docker-Saigon/">meetup.com/Docker-Saigon</a></p>
+
+<h2 id="outline:cb6baf67dddd3a71c07abfd705dc7d4b">Outline</h2>
+
+<ol>
+<li><p><a href="#overview-of-linux-containers:cb6baf67dddd3a71c07abfd705dc7d4b">Overview of Linux containers</a></p>
+
+<p>What is a Linux container, some history about Linux containers. How do they relate to Package Managers, Configuration Management, &hellip;?</p></li>
+
+<li><p><a href="#how:cb6baf67dddd3a71c07abfd705dc7d4b">How do they work?</a></p>
+
+<p>Namespaces, cgroups, Images, Layers &amp; copy-on-write</p></li>
+
+<li><p><a href="#overview-of-container-runtimes:cb6baf67dddd3a71c07abfd705dc7d4b">Overview of Container Runtimes</a></p>
+
+<p>Past, Current and Future</p></li>
+
+<li><p><a href="#docker-api:cb6baf67dddd3a71c07abfd705dc7d4b">Docker API</a></p>
+
+<p>With a focus on Events &amp; Hooks</p></li>
+
+<li><p><a href="#container-format-explosion:cb6baf67dddd3a71c07abfd705dc7d4b">Container Format explosion</a></p>
+
+<p>Evolution towards a common standard?</p></li>
+</ol>
+
+<h2 id="overview-of-linux-containers:cb6baf67dddd3a71c07abfd705dc7d4b">Overview of Linux containers</h2>
+
+<p>The target of this section is to give a very short overview of containers from a Linux system perspective, it is not meant as an introduction to users unfamiliar with Docker nor people unfamiliar with Linux systems.</p>
+
+<p>Developers in Saigon looking to find out more on how they can get started with Docker, are referred to the excellent <a href="https://docs.docker.com/toolbox/overview/">Installation Guide (OSX/Windows)</a> and <a href="https://docs.docker.com/engine/userguide/">User Guides</a> available on the Docker website.</p>
+
+<p>Anyone wondering if/why Docker matters, is invited to contact the <a href="http://docker-saigon.github.io/about/">Docker Saigon</a> user group (preferably through our <a href="http://dockersaigon.herokuapp.com/">Slack auto-invite app</a>) for discussion.</p>
+
+<h3 id="what-is-a-container:cb6baf67dddd3a71c07abfd705dc7d4b">What is a container?</h3>
+
+<p>In 4 bullet points:</p>
+
+<ul>
+<li>Containers share the host kernel</li>
+<li>Containers use the kernel ability to group processes for resource control</li>
+<li>Containers ensure isolation through namespaces</li>
+<li>Containers feel like lightweight VMs (lower footprint, faster), but are <strong>not Virtual Machines!</strong></li>
+</ul>
+
+<p>Components of a container <strong>ecosystem</strong>:</p>
+
+<ul>
+<li>Runtime</li>
+<li>Image distribution</li>
+<li>Tooling</li>
+</ul>
+
+<p>Now&hellip; if you look in the Linux <code>kernel</code>, there is no such thing as a container&hellip;</p>
+
+<h3 id="history-of-container-technology:cb6baf67dddd3a71c07abfd705dc7d4b">History of Container Technology</h3>
+
+<ul>
+<li>Chroot circa 1982</li>
+<li>FreeBSD Jails circa 2000</li>
+<li>Solaris Zones circa 2004</li>
+<li>Meiosys - MetaClusters with Checkpoint/Restore 2004-05</li>
+<li>Linux OpenVZ circa 2005 (not in mainstream Linux)</li>
+<li>AIX WPARs circa 2007</li>
+<li>LXC circa 2008</li>
+<li>Systemd-nspawn circa 2010-2013</li>
+<li>Docker circa 2013
+
+<ul>
+<li>built on <strong>LXC</strong></li>
+<li>moved to <strong>libcontainer</strong> (March 2014)</li>
+<li><strong>appC</strong> (CoreOS) announced (December 2015)</li>
+<li>Open Containers standard for convergence with Docker Announced (June 2015)</li>
+<li>moved to <strong>runC</strong> (OCF compliant) (July 2015)</li>
+</ul></li>
+<li>&hellip; many more container formats are coming</li>
+</ul>
+
+<p><a href="http://www.slideshare.net/jkshah/postgresql-and-linux-containers">Reference slide deck</a></p>
+
+<h3 id="how-do-containers-compare-to-package-managers:cb6baf67dddd3a71c07abfd705dc7d4b">How do containers compare to Package Managers?</h3>
+
+<p>Why are containers different from package management?</p>
+
+<p>Packaging into an image is similar to an RPM, but apart from the Linux distributions - software is rarely packaged correctly.</p>
+
+<p>The big innovation of Docker is that it is a slightly easier to use Package Manager. <strong>Package managers failed us due to shared libraries version differences causing dependency issues</strong>, packaging shared libraries in an image goes around that.</p>
+
+<p>What is missing?</p>
+
+<p>Package managers provide an easy way to find out what is inside the packages. If you are wondering how to handle this with Container Images&hellip;</p>
+
+<p>See the <a href="https://github.com/docker/community/blob/master/DockerCon/DockerCon%20EU%202015.md">Dockercon EU talks</a> where a system of meta data tags were suggested for image inspection. See <a href="https://youtu.be/j4SZ1qoR8Hs">Shipping Manifests, Bill of Lading and Docker Metadata and Container - Video</a></p>
+
+<h3 id="how-do-containers-compare-to-configuration-management:cb6baf67dddd3a71c07abfd705dc7d4b">How do containers compare to Configuration Management?</h3>
+
+<p>Configuration Management utilities provide the ability to store Infrastructure as code. Popular CM tools include:</p>
+
+<ul>
+<li><a href="https://puppetlabs.com/">Puppet</a> (Ruby)</li>
+<li><a href="https://www.chef.io/">Chef</a> (Ruby)</li>
+<li><a href="https://www.ansible.com/">Ansible</a> (Python)</li>
+<li><a href="http://saltstack.com/">SALT</a> (Python)</li>
+<li><a href="https://github.com/hashicorp/terraform">Terraform</a> (Golang)</li>
+</ul>
+
+<p>Several of the above tools are often still procedurally provisioning the environment as opposed to distributing a package which is self-contained and runs in exactly the same way on the same architectures in every environment (environments may differ in Linux distribution [Ubuntu/redhat/..], scale [local laptop / server cluster/ &hellip;], &hellip;).</p>
+
+<p>However, it is still <strong>advisable to leverage such a provisioning tool to bootstrap the Docker infrastructure</strong>, letting the Container Runtime layer take care of the application layer once it is ready.</p>
+
+<p>In Summary, I believe the following key points drive the adoption of Docker containers:</p>
+
+<ul>
+<li><p>Docker provides a self-contained image that is exactly that same image running on your laptop vs in the cloud while i.e. Puppet/Chef are procedural scripts that need to rerun to converge your cluster machines. This enables approaches also know as Immutable Infrastructure or Phoenix Deploys.</p></li>
+
+<li><p>Docker is really fast, to stand up a container takes very few seconds! There is very little overhead (cpu, memory, io, image footprint, ..) enabling high density (such as running a full stack of containers on your laptop, if you use Puppet/Chef, you&rsquo;d need to create several VM&rsquo;s with a much heavier footprint).</p></li>
+
+<li><p>The community adopted Docker quickly due to the ease of how to build an image, the <strong>Dockefile DSL</strong> is very simple and very powerful (you can use pure bash to build the image or you can use load python scripts or anything similar you are familiar with for machine configuration.</p></li>
+</ul>
+
+<h3 id="why-docker:cb6baf67dddd3a71c07abfd705dc7d4b">Why Docker?</h3>
+
+<p>Docker is currently the only ecosystem providing the full package:</p>
+
+<ul>
+<li>Image management</li>
+<li>Resource Isolation</li>
+<li>File System Isolation</li>
+<li>Network Isolation</li>
+<li>Change Management</li>
+<li>Sharing</li>
+<li>Process Management</li>
+<li>Service Discovery (DNS since 1.10)</li>
+</ul>
+
+<h2 id="how:cb6baf67dddd3a71c07abfd705dc7d4b">How?</h2>
+
+<p>The target of this section is to have a very detailed look into each component in the Linux stack which make Linux Containers possible.</p>
+
+<p>A higher level overview is available (and was used as a reference) in the <a href="See also: [Understanding the Docker architecture](https://docs.docker.com/engine/understanding-docker/">Official Docker documentation</a>)</p>
+
+<h3 id="kernel-namespaces:cb6baf67dddd3a71c07abfd705dc7d4b">Kernel Namespaces</h3>
+
+<p>Allow you to create isolation of:</p>
+
+<ul>
+<li>Process trees (PID Namespace)</li>
+<li>Mounts (MNT namespace) <code>wc -l /proc/mounts</code></li>
+<li>Network (Net namespace) <code>ip addr</code></li>
+<li>Users / UIDs (User Namespace)</li>
+<li>Hostnames (UTS Namespace) <code>hostname</code></li>
+
+<li><p>Inter Process Communication (IPC Namespace) <code>ipcs</code></p>
+
+<p>Notable example using IPC = PostgreSQL</p></li>
+</ul>
+
+<h3 id="cgroups:cb6baf67dddd3a71c07abfd705dc7d4b">Cgroups</h3>
+
+<p>Kernel control groups (cgroups) allow you to do accounting on resources used by processes, a little bit of access control on device nodes and other things such as freezing groups of processes.</p>
+
+<p>Ref DockerCon EU: <a href="https://www.youtube.com/watch?v=sK5i-N34im8">jpetazzoni: What are containers made from</a>, we attempt to provide here a summarized overview of this excellent presentation.</p>
+
+<p>cgroups consist of one hierarchy (tree) per resource (cpu, memory, &hellip;) . for example:</p>
+
+<pre><code>cpu                      memory
+├── batch                ├── 109
+│   ├── hadoop           ├── 88 &lt;
+│   │   ├── 88 &lt;         ├── 25
+│   │   └── 109          ├── 26
+└── realtime             └── databases
+    ├── nginx                ├── 1008
+    │   ├── 25               └── 524
+    │   └── 26          
+    ├── postgres 
+    │   ├── 524  
+    └── redis    
+        └── 1008 
+</code></pre>
+
+<p>We can create sub groups for each hierarchy, in the example above custom <code>batch</code> and <code>realtime</code> sub groups for the <code>cpu</code> resource were created. Each process will be in 1 node for each resource (<code>pid</code> 88 is in a node for the memory resource as well as the cpu resource, &hellip;)</p>
+
+<blockquote>
+<p><strong>Note: cgroups are system wide</strong>
+The feature is enabled / disabled at boot time and can not be controlled on a per process level</p>
+</blockquote>
+
+<p>A closer look at each resource tree:</p>
+
+<h4 id="memory-cgroup:cb6baf67dddd3a71c07abfd705dc7d4b">Memory cgroup:</h4>
+
+<p>The Memory resource provides 3 types of functionality: Accounting, Limits &amp; Notifications</p>
+
+<h5 id="accounting:cb6baf67dddd3a71c07abfd705dc7d4b">Accounting</h5>
+
+<p>granularity = memory page size (4kb depending on the architecture)</p>
+
+<p>2 type of memory pages:</p>
+
+<ul>
+<li><strong>file pages</strong>: loaded from disk (important because we know the data is still on disk and can be removed from memory, no need to swap when memory needs to be reclaimed)</li>
+<li><strong>anonymous pages</strong>: memory that does not correspond to anything on disk, for this type we have to swap out if we want to reclaim this memory</li>
+</ul>
+
+<p>Some pages can be shared, for example: multiple processes reading from the same files.</p>
+
+<p>Create 2 pools for all pages:</p>
+
+<ul>
+<li>Active</li>
+<li>Inactive pages - keep often accessed pages into active set.</li>
+</ul>
+
+<p>Each page is accounted to a group, shared pages are only accounted to 1 group and re-allocated to another group if that group goes away.</p>
+
+<h5 id="limits:cb6baf67dddd3a71c07abfd705dc7d4b">Limits</h5>
+
+<p>Each group optionally has 2 type of limits:</p>
+
+<ul>
+<li><p><strong>Hard limits</strong>: If the group goes above its hard limit, the group gets killed with an <code>out of memory</code> error. (which is why it is a good practice to put a single process in a container)</p></li>
+
+<li><p><strong>Soft limits</strong>: not enforced&hellip; except when the system starts to run out of memory. The more a process goes over its soft limit, the higher the chance pages get reclaimed for its group</p></li>
+</ul>
+
+<p>There are 3 kinds of memories on which limits can be applied:</p>
+
+<ul>
+<li>physical memory</li>
+<li>kernel memory: to avoid processes abusing the kernel to allocate memory</li>
+<li>total memory</li>
+</ul>
+
+<h5 id="note:cb6baf67dddd3a71c07abfd705dc7d4b">Note</h5>
+
+<ul>
+<li><p>oom-notifier</p>
+
+<p>Provides a mechanism to give control to a user program to handle a group going over its limits by freezing the processes in the group and notifying user space. At this point the program handling the notification could kill the container, raise the limits or migrate the container.</p></li>
+
+<li><p>Overhead:</p>
+
+<p>Each time the kernel gives or takes a page to or from a process, counters are updated.</p></li>
+</ul>
+
+<h3 id="hugetbl-cgroup:cb6baf67dddd3a71c07abfd705dc7d4b">HugeTBL cgroup</h3>
+
+<p>Accounting for usage of huge pages by process group, ignoring for now..</p>
+
+<h3 id="cpu-cgroup:cb6baf67dddd3a71c07abfd705dc7d4b">CPU cgroup</h3>
+
+<ul>
+<li>keeps track of user/system CPU time</li>
+<li>keeps track of usage per CPU</li>
+
+<li><p>allows to set weights - not limits</p>
+
+<p><strong>Why no limits?</strong> On an idle host a container with low shares will still be able to use 100% of the CPU</p></li>
+</ul>
+
+<h3 id="cpuset-cgroup:cb6baf67dddd3a71c07abfd705dc7d4b">CPUSet cgroup</h3>
+
+<p>Bind group to specific CPU</p>
+
+<p>Useful for:</p>
+
+<ul>
+<li>Real Time applications</li>
+<li>NUMA systems with localized memory per CPU</li>
+</ul>
+
+<h3 id="blkio-cgroup:cb6baf67dddd3a71c07abfd705dc7d4b">BlkIO cgroup</h3>
+
+<p>Measure &amp; Limit amount of blckIO by group, unless your processes do direct IO - setting limits may give surprising results.</p>
+
+<h3 id="net-cls-and-net-prio-cgroup:cb6baf67dddd3a71c07abfd705dc7d4b">net_cls and net_prio cgroup</h3>
+
+<p>Kernel will only tag the traffic and you are responsible for doing traffic control (<code>tc</code>)</p>
+
+<h3 id="devices-cgroup:cb6baf67dddd3a71c07abfd705dc7d4b">Devices cgroup</h3>
+
+<p>Controls which group can <strong>read/write access</strong> devices. Can be used to prevent groups to read/write directly to disk drives, very important for containers</p>
+
+<p>Typically with containers access to <code>/dev/{tty,zero,random,null}</code> are allowed and everything else is denied.</p>
+
+<p>Why <code>/dev/random</code>? Because if you are generating encryption keys inside a container, you will quickly deplete the entropy unless you read it from the host..</p>
+
+<p>Other interesting devices for containers:</p>
+
+<ul>
+<li><code>/dev/net/tun</code> if you want to do anything with vpn&rsquo;s inside a container without polluting the host</li>
+<li><code>/dev/fuse</code> custom filesystems in a container</li>
+<li><code>/dev/kvm</code> to allow virtual machines to run inside a container</li>
+<li><code>/dev/dri</code> &amp; <code>/dev/video</code> for GPU access in containers - (see <a href="https://github.com/NVIDIA/nvidia-docker">NVIDIA/nvidia-docker</a>).</li>
+</ul>
+
+<h3 id="freezer-cgroup:cb6baf67dddd3a71c07abfd705dc7d4b">Freezer cgroup</h3>
+
+<p>Freeze a whole group without sending <code>SIGSTOP/SIGCONT</code> to the group (without interfering in the process).</p>
+
+<p>Useful for:</p>
+
+<ul>
+<li>cluster batch scheduling</li>
+<li>process migration - think CRIU</li>
+<li>debugging without affecting prtrace</li>
+</ul>
+
+<h3 id="how-to-manage-cgroups-with-systemd:cb6baf67dddd3a71c07abfd705dc7d4b">How to manage cgroups with Systemd?</h3>
+
+<p>By setting the <code>ControlGroupAttribute</code> in the unit file:</p>
+
+<pre><code>.include /usr/lib/systemd/system/httpd.service
+
+[Service]
+ControlGroupAttribute=memory.swappiness 70
+</code></pre>
+
+<p>Or <strong>temporarily</strong> on a running process through:</p>
+
+<pre><code>systemctl set-property &lt;group&gt; CPUShares=512
+</code></pre>
+
+<p>To show all properties of an existing group:</p>
+
+<pre><code>systemctl show &lt;group&gt;
+</code></pre>
+
+<p>The above commands go behind the Docker daemon and may result in unexpected behaviour (i.e.: settings are reverted on container restarts)</p>
+
+<blockquote>
+<p>Note: Docker 1.10 introduced the <code>docker update</code> command to change cgroup limits on the fly for certain attributes:</p>
+
+<pre><code>Usage: docker update [OPTIONS] CONTAINER [CONTAINER...]
+
+Updates container resource limits
+
+  --blkio-weight=0           Block IO (relative weight), between 10 and 1000
+  --cpu-shares=0             CPU shares (relative weight)
+  --cpu-period=0             Limit the CPU CFS (Completely Fair Scheduler) period
+  --cpu-quota=0              Limit the CPU CFS (Completely Fair Scheduler) quota
+  --cpuset-cpus=&quot;&quot;           CPUs in which to allow execution (0-3, 0,1)
+  --cpuset-mems=&quot;&quot;           Memory nodes (MEMs) in which to allow execution (0-3, 0,1)
+  -m, --memory=&quot;&quot;            Memory limit
+  --memory-reservation=&quot;&quot;    Memory soft limit
+  --memory-swap=&quot;&quot;           Total memory (memory + swap), '-1' to disable swap
+  --kernel-memory=&quot;&quot;         Kernel memory limit: container must be stopped
+</code></pre>
+</blockquote>
+
+<h3 id="how-does-the-kernel-expose-cgroups:cb6baf67dddd3a71c07abfd705dc7d4b">How does the kernel expose cgroups?</h3>
+
+<p>Groups are created through a pseudo file system, this is how <code>systemctl</code> applies your configuration changes:</p>
+
+<pre><code>mkdir /sys/fs/cgroup/memory/somegroup/subcgroup
+</code></pre>
+
+<p>To move a process, just echo the process id to the special <code>tasks</code> file in the path of the group:</p>
+
+<pre><code>echo $PID &gt; /sys/fs/cgroup/.../tasks
+</code></pre>
+
+<h3 id="iptables-networking:cb6baf67dddd3a71c07abfd705dc7d4b">IPTables (networking)</h3>
+
+<p>Isolation on the networking level is achieved through the creation of virtual switches in the linux kernel.  Linux Bridge is a kernel module, first introduced in 2.2 kernel (circa 2000). And it is administered using the <code>brctl</code> command on Linux.</p>
+
+<p>Linux bridges are heavily used for the setup of Linux virtualization &amp; Software Defined Networking (SDN).</p>
+
+<p>Network shaping and bandwidth control for Linux containers can be achieved through the use of existing technology such as <a href="http://www.lartc.org/manpages/tc.txt"><code>tc</code></a>, I will not attempt to cover this here.</p>
+
+<p>Below is a quick demo on how Docker uses the Linux Bridge together with IPTables functionality to create isolated Container networks and expose container ports.</p>
+
+<h4 id="container-networking-and-port-forwarding:cb6baf67dddd3a71c07abfd705dc7d4b">Container networking and port forwarding</h4>
+
+<p>We will be using an Alpine image with DNS tools such as <code>dig</code> and an exposed port:</p>
+
+<pre><code>docker build -t so0k/envtest - &lt;&lt; EOF
+FROM alpine:latest
+MAINTAINER Vincent De Smet &lt;vincent.drl@gmail.com&gt;
+
+RUN apk --update add bind-tools &amp;&amp; rm -rf /var/cache/apk/*
+EXPOSE 80
+EOF
+</code></pre>
+
+<p>Create a test network</p>
+
+<pre><code>docker network create test
+</code></pre>
+
+<p>Run 2 containers to demonstrate the resulting Linux configuration:</p>
+
+<pre><code>docker run --net test -dit --name host1 -P so0k/envtest sh
+</code></pre>
+
+<pre><code>docker run --net test -dit --name host2 -P so0k/envtest sh
+</code></pre>
+
+<pre><code>docker ps
+</code></pre>
+
+<p>Overview of Linux bridges &amp; IPtable rules:</p>
+
+<pre><code>brctl show
+</code></pre>
+
+<pre><code>sudo iptables -nvL
+</code></pre>
+
+<p>Notice a port has been opened for each port exposed within the container image:</p>
+
+<pre><code>ss -an | grep LISTEN
+</code></pre>
+
+<p>With the default Docker configuration, a userland docker-proxy process is used:</p>
+
+<pre><code>ps -Af | grep proxy
+</code></pre>
+
+<blockquote>
+<p>be careful if you need to open <a href="https://github.com/docker/docker/issues/11185">a lot of ports&hellip;</a></p>
+</blockquote>
+
+<pre><code>docker run --net test -dit --name prangetest -p 76-85:76-85 so0k/envtest sh
+</code></pre>
+
+<p>Memory usage by these proxies:</p>
+
+<pre><code>ps -o pid,%cpu,%mem,sz,vsz,cmd -A --sort -%mem | grep proxy
+</code></pre>
+
+<blockquote>
+<p>You can <a href="https://docs.docker.com/engine/userguide/networking/default_network/binding/#bind-container-ports-to-the-host">disable the userland docker-proxies</a> forcing Docker to usee the Linux kernel <a href="http://lwn.net/Articles/347344/">&lsquo;hairpin&rsquo;</a> forwarding mode (kernel &gt;=3.6) with alternative <code>iptable</code> rules. This will improve network performance and memory usage.</p>
+
+<p><strong>Note</strong>  if you do not use the docker-proxy - your other containers may not be able to connect without hairpin NAT setup&hellip;</p>
+</blockquote>
+
+<p>Next, demonstrate some simple <strong>&ldquo;Service Discovery&rdquo;</strong> provided within Docker networks:</p>
+
+<pre><code>docker exec -it host1 ping host2
+</code></pre>
+
+<pre><code>docker exec -it host2 netstat -an
+</code></pre>
+
+<pre><code>docker exec -it host1 dig host3 +noall +answer +stats
+</code></pre>
+
+<p>Notice how the container has been re-configured by Docker for name resolution:</p>
+
+<pre><code>docker exec host2 cat /etc/resolv.conf
+</code></pre>
+
+<p>The dns process was injected into the container:</p>
+
+<pre><code>docker exec -it host2 netstat -an
+</code></pre>
+
+<blockquote>
+<p><a href="https://docs.docker.com/engine/userguide/networking/configure-dns/">more info on configuration of the embedded DNS</a>. notice we can create container aliases and still create private links between containers where required.</p>
+</blockquote>
+
+<p>Let&rsquo;s demonstrate the isolation between separate container networks:</p>
+
+<pre><code>docker network create test2
+</code></pre>
+
+<pre><code>docker run --net test2 -dit --name host3 -P so0k/envtest sh
+</code></pre>
+
+<pre><code>docker run --net test2 -dit --name host4 -P so0k/envtest sh
+</code></pre>
+
+<p>Notice another Linux bridge was created for this network:</p>
+
+<pre><code>brctl show
+</code></pre>
+
+<pre><code>sudo iptables -nvL
+</code></pre>
+
+<p>Confirm containers on the first network can not reach containers on the second network. (to really confirm this use the actual container IPs instead of hostnames)</p>
+
+<pre><code>docker exec -it host1 ping host4
+</code></pre>
+
+<p>Name Resolution was introduced with Docker 1.10 in Q1 2016. The Docker DNS server is not exposed to containers connected to the default Docker bridge for backwards compatibility. (Running containers without the <code>--net</code> parameter puts them on the default bridge):</p>
+
+<pre><code>docker run -dit --name def-host1 -P so0k/envtest sh
+</code></pre>
+
+<pre><code>docker run -dit --name def-host2 -P so0k/envtest sh
+</code></pre>
+
+<p>No name resolution:</p>
+
+<pre><code>docker exec -it def-host1 cat /etc/resolv.conf
+</code></pre>
+
+<pre><code>docker exec -it def-host1 hostname
+</code></pre>
+
+<pre><code>docker exec -it def-host1 cat /etc/hosts
+</code></pre>
+
+<p>If these containers need to find each other, use links, just like it used to be before Docker 1.10</p>
+
+<pre><code>docker run -dit --name def-host3 --link def-host1 -P so0k/envtest sh
+</code></pre>
+
+<pre><code>docker exec -it def-host3 cat /etc/hosts
+</code></pre>
+
+<p>If you want to expose additional ports to the public, here is an example for the containers connected to the Default bridge:</p>
+
+<pre><code> #forward packets from port 8001 on your host to port 8000 on the container
+ iptables -t nat -A DOCKER -p tcp --dport 8001 -j DNAT --to-destination ${CONTAINER_IP}:8000
+</code></pre>
+
+<p>Let&rsquo;s revise the cgroup setup of all the containers created above as seen earlier:</p>
+
+<pre><code>sudo systemd-cgls
+</code></pre>
+
+<h3 id="security:cb6baf67dddd3a71c07abfd705dc7d4b">Security</h3>
+
+<ul>
+<li>AppArmor &amp; <a href="https://github.com/jfrazelle/bane">jfrazelle/bane</a></li>
+<li><a href="http://blog.scalock.com/new-docker-security-features-and-what-they-mean-seccomp-profiles">Seccomp</a></li>
+<li><a href="http://linux.die.net/man/7/capabilities">Capabilities</a></li>
+</ul>
+
+<p>Currently no examples provided in this document&hellip; This is subject of further study.</p>
+
+<h3 id="types-of-containers:cb6baf67dddd3a71c07abfd705dc7d4b">Types of Containers</h3>
+
+<p>Given the above constructs, containers may be divided into 3 types as follows:</p>
+
+<ul>
+<li><p><strong>System Containers</strong> share rootfs, PID, network, IPC and UTS with host system but live inside a cgroup.</p></li>
+
+<li><p><strong>Application Containers</strong> live inside a cgroup and use namespaces (PID, network, IPC, chroot) for isolation from host system</p></li>
+
+<li><p><strong>Pods</strong> use namespaces for isolation from host system but create sub groups which share PID, network, IPC and UTS except the rootfs.</p></li>
+</ul>
+
+<blockquote>
+<p><strong>Note</strong>, current Pod implementations on top of <strong>Docker are sub optimal</strong> as a work around is needed to allow the sub groups to share namespaces (this is implemented through a sleep container which is essentially pid 1). Ideally something like systemd is used as the PID 1 to share the namespaces between the sub groups and chroot to separate the rootfs.</p>
+
+<p>Reference <a href="https://www.youtube.com/watch?v=et7BCV_kAUY">Brandon Philips: Where We Are and Where We Are Going</a></p>
+</blockquote>
+
+<h3 id="images-layers:cb6baf67dddd3a71c07abfd705dc7d4b">Images &amp; Layers</h3>
+
+<p>Images you create yourself or images created by others are stored in <a href="https://docs.docker.com/engine/understanding-docker/#inside-docker">Docker Registries</a>. These are public or private stores from which you upload or download images. Docker registries are the <strong>distribution</strong> component of Docker.</p>
+
+<p>There are 3 choices for use of a Registry:</p>
+
+<ul>
+<li><p>A Public Cloud-hosted registry. The <a href="https://hub.docker.com">Docker Hub</a> is the default registry used by the docker client and source of Officially maintained Docker images, however alternatives exists such as <a href="https://quay.io">Quay.io</a>. Limited Private repositories may be created or purchased to enable a quick Docker adoption.</p></li>
+
+<li><p>An On-premise registry, through the commercially offered <a href="https://docs.docker.com/docker-trusted-registry/overview/">Trusted Docker Registry</a>, providing advanced configuration options, Logging, usage and system health metrics and much more&hellip;</p></li>
+
+<li><p>A Self-hosted registry based on the official Open Source <a href="https://github.com/docker/distribution">Docker Registry</a>. This is a fully functional Registry which you can fully setup by yourself and is the basis on which the Docker Trusted Registry is built, but it does not provide advanced monitoring &amp; access control as well as requires manual maintenance.</p></li>
+</ul>
+
+<p>Each Docker image references a list of read-only layers that represent filesystem differences. Layers are stacked on top of each other to form a base for a container’s rootfs.</p>
+
+<p><img src="http://docker-saigon.github.io/img/image-layers.jpg" alt="" /></p>
+
+<p>When the container starts, the Docker engine prepares the rootfs &amp; uses <code>chroot</code> for the container filesystem isolation - similar to LXC. The real innovation of the Docker engine was the leveraging Copy-On-Write file systems to significantly speed up the preparation of the rootfs.</p>
+
+<h3 id="copy-on-write:cb6baf67dddd3a71c07abfd705dc7d4b">Copy-On-Write</h3>
+
+<p>Before Docker, LXC would create a full copy of FileSystem when creating a container. This would be slow and take up a lot of space</p>
+
+<p>When <strong>Docker</strong> creates a <strong>container</strong>, it <strong>adds a new, thin, writable layer</strong> on top of the underlying stack of image layers. This layer is often called the “container layer”.</p>
+
+<p>All changes made to the running container - such as writing new files, modifying existing files, and deleting files - are written to this thin writable container layer.</p>
+
+<p>by not copying the full rootfs, Docker reduces the amount of space consumed by containers and also reduces the time required to start a container. Below is a diagram showing multiple containers and its &ldquo;container layer&rdquo;, sharing</p>
+
+<p><img src="http://docker-saigon.github.io/img/sharing-layers.jpg" alt="" /></p>
+
+<p>Union File Systems provide the following features for storage:</p>
+
+<ul>
+<li>Layering</li>
+<li>Copy-On-Write</li>
+<li>Caching</li>
+<li>Diffing</li>
+</ul>
+
+<p>By introducing storage plugins in Docker, many options are available for the Copy-On-Write functionality, for example:</p>
+
+<ul>
+<li>OverlayFS (CoreOS)</li>
+<li>AUFS (Ubuntu)</li>
+<li>device mapper (RHEL)</li>
+<li>btrfs (next-gen RHEL)</li>
+<li><a href="https://news.ycombinator.com/item?id=11125063">ZFS</a> (next-gen Ubuntu releases)</li>
+</ul>
+
+<p>A quick overview on when to choose which, is provided here, full details are on the excellent <a href="https://docs.docker.com/engine/userguide/storagedriver/imagesandcontainers/">Docker Docs</a></p>
+
+<ul>
+<li><strong>AUFS: PaaS-type work</strong>:</li>
+</ul>
+
+<table>
+<thead>
+<tr>
+<th>Pro</th>
+<th>Con</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td>stable</td>
+<td>high write activity</td>
+</tr>
+
+<tr>
+<td>production ready</td>
+<td>not in mainline kernel</td>
+</tr>
+
+<tr>
+<td>good memory use</td>
+<td></td>
+</tr>
+
+<tr>
+<td>smooth Docker experience</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+
+<p>Aufs3 default &amp; recommended for Ubuntu currently</p>
+
+<ul>
+<li><strong>devicemapper (direct-lvm): Paas-type work</strong>:</li>
+</ul>
+
+<table>
+<thead>
+<tr>
+<th>Pro</th>
+<th>Con</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td>stable</td>
+<td>??</td>
+</tr>
+
+<tr>
+<td>production ready</td>
+<td></td>
+</tr>
+
+<tr>
+<td>in mainline kernel</td>
+<td></td>
+</tr>
+
+<tr>
+<td>smooth Docker experience</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+
+<p>The most stable configuration for production environments on RHEL, but requires daemon flags to overwrite the defauts.</p>
+
+<ul>
+<li><strong>devicemapper (loop): Lab testing - this is default in Docker on RHEL, not recommended for production</strong></li>
+</ul>
+
+<table>
+<thead>
+<tr>
+<th>Pro</th>
+<th>Con</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td>stable</td>
+<td>production</td>
+</tr>
+
+<tr>
+<td>in mainline kernel</td>
+<td>performance</td>
+</tr>
+
+<tr>
+<td>smooth Docker experience</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+
+<p>Using a loopback mounted sparse file, additional codepaths and overhead
+does not suit I/O heavy workloads.</p>
+
+<ul>
+<li><strong>OverlayFS: Lab testing</strong></li>
+</ul>
+
+<table>
+<thead>
+<tr>
+<th>Pro</th>
+<th>Con</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td>stable</td>
+<td>container churn</td>
+</tr>
+
+<tr>
+<td>in mainline kernel</td>
+<td></td>
+</tr>
+
+<tr>
+<td>good memory use</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+
+<p>Hailed as the future, default on CoreOS, but less mature and thus potentially less stable&hellip;</p>
+
+<p>but&hellip; ionodes problems if there is high rate of containers creation/removal
+so, not good for build pools..</p>
+
+<ul>
+<li><strong>Btrfs: Build Pools</strong></li>
+</ul>
+
+<table>
+<thead>
+<tr>
+<th>Pro</th>
+<th>Con</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td>in mainline kernel</td>
+<td>high write activity</td>
+</tr>
+
+<tr>
+<td></td>
+<td>container churn</td>
+</tr>
+</tbody>
+</table>
+
+<h2 id="overview-of-container-runtimes:cb6baf67dddd3a71c07abfd705dc7d4b">Overview of Container Runtimes</h2>
+
+<p>The target of this section is to play with other container runtimes (some of the past, some alternatives to Docker and some upcoming implementations)</p>
+
+<h3 id="lxc:cb6baf67dddd3a71c07abfd705dc7d4b">LXC</h3>
+
+<p>Originally used by Docker as backend until libcontainer replaced it.</p>
+
+<ul>
+<li>Installing:</li>
+</ul>
+
+<pre><code>install bridge-utils libvirt lxc lxc-templates
+</code></pre>
+
+<ul>
+<li>Available commands</li>
+</ul>
+
+<pre><code>lxc-attach       lxc-config    lxc-freeze    lxc-start     lxc-usernsexec
+lxc-autostart    lxc-console   lxc-info      lxc-stop      lxc-wait
+lxc-cgroup       lxc-create    lxc-ls        lxc-top
+lxc-checkconfig  lxc-destroy   lxc-monitor   lxc-unfreeze
+lxc-clone        lxc-execute   lxc-snapshot  lxc-unshare
+</code></pre>
+
+<ul>
+<li>Quick Guide to use an LXC based container of busybox</li>
+</ul>
+
+<pre><code>wget https://www.busybox.net/downloads/binaries/busybox-x86_64 -o busybox
+chmod a+x busybox
+PATH=$(pwd):$PATH lxc-create -t busybox -n mycontainer
+lxc-start -d -n mycontainer
+lxc-console -n mycontainer # (use CTRL-A Q to exit console mode)
+lxc-stop -n mycontainer
+lxc-destroy -n mycontainer
+</code></pre>
+
+<h3 id="systemd-nspawn:cb6baf67dddd3a71c07abfd705dc7d4b">Systemd-nspawn</h3>
+
+<p>Originally created to debug the Systemd init system, future versions to be more integrated in the core of the OS (the most low-level and minimal approach to make containers native to the OS).</p>
+
+<p>CoreOS Toolbox uses systemd-nspawn and CoreOS rkt builds on top of it.</p>
+
+<ul>
+<li>Installing:</li>
+</ul>
+
+<p>Included with all recent Linux distribution releases..</p>
+
+<ul>
+<li>Commands available</li>
+</ul>
+
+<pre><code>systemd-analyze       systemd-delta         systemd-nspawn
+systemd-ask-password  systemd-detect-virt   systemd-run
+systemd-cat           systemd-cgls          systemd-loginctl
+systemd-sysv-convert  systemd-cgtop         systemd-machine-id-setup
+systemd-coredumpctl   systemd-notify        systemd-tty-ask-password-agent
+systemd-inhibit       systemd-stdio-bridge  systemd-tmpfiles
+systemdctl            machinectl            hostnamectl         journalctl
+</code></pre>
+
+<ul>
+<li>Quick Guide to a container deployment using systemd-nspawn</li>
+</ul>
+
+<pre><code> # Create an Image (fedora)
+ sudo yum -y --releasever=7 --nogpg --installroot=/mycontainers/centos7 \
+  --disablerepo='*' --enablerepo=fedora \
+  install systemd passwd yum fedora-release vim-minimal
+
+ # Change the root password in the image (through a shell in the rootfs)
+ sudo systemd-nspawn -D /mycontainers/centos7
+ passwd
+ exit
+
+ # Start the container as if booting into the container image
+ sudo systemd-nspawn -bD /mycontainers/centos7 -M mycontainer --bind /from/host:/in/container
+
+ # Get list of containers registered with machine
+ machinectl list
+ machinectl status mycontainer
+
+ # log into the container
+ machinectl login mycontainer
+
+ # or enter the running namespace
+ nsenter -m -u -i -n -p -t $PID
+</code></pre>
+
+<p><a href="https://chimeracoder.github.io/docker-without-docker/#18">see also - Docker without Docker</a></p>
+
+<h3 id="runc:cb6baf67dddd3a71c07abfd705dc7d4b">runC</h3>
+
+<p>Spun out via <code>libcontainer</code> from Docker Engine and made OCI compliant, currently core of Docker Engine</p>
+
+<ul>
+<li>Installing runC</li>
+</ul>
+
+<pre><code>apt-get update &amp;&amp; apt-get install libseccomp2
+curl -Lo /usr/local/bin/runc https://github.com/opencontainers/runc/releases/download/v0.0.8/runc-amd64
+chmod +x /usr/local/bin/runc
+</code></pre>
+
+<ul>
+<li>Building &amp; Installing</li>
+</ul>
+
+<p>On Digital Ocean Ubuntu 14.04 with Docker 1.10 image:</p>
+
+<p>Build dependencies:</p>
+
+<pre><code>apt-add-repository -y ppa:evarlast/golang1.4
+apt-get update
+apt-get install make gcc g++ libc6-dev libseccomp-dev golang
+</code></pre>
+
+<p>Procedure</p>
+
+<pre><code>cd ~ 
+git clone https://github.com/opencontainers/runc
+cd runc
+GOPATH=&quot;$(pwd)&quot; PATH=&quot;$PATH:$GOPATH/bin&quot; make
+make install
+cd ~
+</code></pre>
+
+<ul>
+<li>Commands available</li>
+</ul>
+
+<pre><code>   checkpoint   pause        
+   delete       restore      
+   events       resume       
+   exec         spec         
+   kill         start        
+   list         help
+</code></pre>
+
+<ul>
+<li><p>Quick guide to container deployment using <code>runc</code> &amp; Docker shipping.</p>
+
+<p>Keep in mind that the Docker Engine does all of the below behind the scenes for us and appreciate the level of comfort it provides.</p></li>
+</ul>
+
+<pre><code> # Download an OCF compliant image (using docker for example)
+ docker pull busybox
+
+ # Create busybox/rootfs
+ mkdir -p busybox/rootfs
+
+ # Flatten the image layers &amp; copy to rootfs
+ tmpcontainer=$(docker create busybox)
+ docker export $tmpcontainer | tar -C busybox/rootfs -xf -
+ docker rm $tmpcontainer
+
+ # Generate container spec file
+ cd busybox/
+ runc spec
+
+ # start the container
+ run start test
+
+ # confirm we are now in busybox container
+ /bin/busybox
+ ps -a 
+</code></pre>
+
+<p>Or with <code>debootstrap</code> &hellip;</p>
+
+<pre><code>cd ~
+apt-get install debootstrap
+mkdir -p debian_wheezy/rootfs
+debootstrap --arch=amd64 wheezy debian_wheezy/rootfs
+cd debian_wheezy
+runc spec
+runc start debian
+</code></pre>
+
+<h2 id="docker-api:cb6baf67dddd3a71c07abfd705dc7d4b">Docker API</h2>
+
+<p>The target of this section is to give an overview of how we might hook in to the various Docker components to leverage some of its notification systems. This is purely to quench the thirst of engineers looking to understand platforms built on top of Docker.</p>
+
+<p>Many existing platforms already provide orchestration layers and it is advisable to research existing solutions before implementing your own using these events.</p>
+
+<h3 id="docker-engine:cb6baf67dddd3a71c07abfd705dc7d4b">Docker Engine</h3>
+
+<p><a href="https://docs.docker.com/engine/reference/api/docker_remote_api/">Events</a></p>
+
+<p><img src="http://docker-saigon.github.io/img/event_state.png" alt="" /></p>
+
+<p>Use Cases:</p>
+
+<ul>
+<li><p><a href="https://github.com/jwilder/docker-gen">jwilder/docker-gen</a> - simple implementation</p>
+
+<blockquote>
+<p>docker-gen is a small utility that uses these APIs and exposes container meta-data to templates. Templates are rendered and an optional notification command can be run to restart the service.</p>
+
+<p>Using docker-gen, we can generate Nginx config files automatically and reload nginx when they change. The same approach can also be used for docker log management.</p>
+</blockquote>
+
+<p>Uses: <a href="https://github.com/fsouza/go-dockerclient">fsouza/go-dockerclient</a></p>
+
+<p>Code: <a href="https://github.com/jwilder/docker-gen/blob/0.7.0/generator.go#L211-L278">How this registers Docker client &amp; Passes events to listeners</a> (Golang)</p></li>
+
+<li><p><a href="https://github.com/ehazlett/interlock">ehazlett/interlock</a> - complicated implementation with extensions</p>
+
+<blockquote>
+<p>Dynamic, event-driven extension system using Swarm. Extensions include HAProxy and Nginx for dynamic load balancing.</p>
+</blockquote>
+
+<p>Uses: <a href="https://github.com/samalba/dockerclient">samalba/dockerclient</a></p>
+
+<p>Code: <a href="https://github.com/ehazlett/interlock/blob/master/server/server.go#L174-L205">How this triggers extension reloads using a TTL Cache</a></p></li>
+</ul>
+
+<h3 id="docker-registry:cb6baf67dddd3a71c07abfd705dc7d4b">Docker Registry</h3>
+
+<p>Notifications through webhooks:</p>
+
+<p><img src="http://docker-saigon.github.io/img/notifications.png" alt="" /></p>
+
+<p>Use Case: <a href="https://github.com/ehazlett/conduit">conduit</a></p>
+
+<blockquote>
+<p>Conduit exposes an endpoint that receives webhooks (i.e. from Docker Hub). Upon receiving the hook, Conduit will pull the new image, deploy a new container from the updated image and then remove the original container.</p>
+</blockquote>
+
+<h3 id="docker-compose:cb6baf67dddd3a71c07abfd705dc7d4b">Docker Compose</h3>
+
+<p>Via stdout</p>
+
+<p>See: <a href="https://docs.docker.com/compose/reference/events/">Docker Compose events docs</a> &amp; <a href="https://github.com/docker/compose/pull/2392">PR</a></p>
+
+<p>Sample gist (from PR):</p>
+
+<pre><code> #!/bin/bash
+ set -e
+
+ function handle_event() {
+     local entry=&quot;$1&quot;
+     local action=$(echo $entry | jq -r '.action')
+     local service=$(echo $entry | jq -r '.service')
+     local hook=&quot;./hooks/$service/$action&quot;
+     if [ -x &quot;$hook&quot; ]; then
+         &quot;$hook&quot; &quot;$entry&quot;
+     fi
+ }
+
+ docker-compose events --json | (
+     while read line; do
+         handle_event &quot;$line&quot;
+     done
+ )
+</code></pre>
+
+<h2 id="container-format-explosion:cb6baf67dddd3a71c07abfd705dc7d4b">Container Format explosion</h2>
+
+<p>As Docker made containers easy, an ecosystem emerged with an incredible amount of contributions towards the Docker standard.</p>
+
+<p>However, different opinions exist concerning the exact requirements &amp; responsibilities of each layer within a Container infrastructure with many big players looking to take a piece of the pie - divergence was to be expected.</p>
+
+<p>The target of this section is to have a look at future and upcoming infrastructures. Out of these, Docker is currently (end 2015) the most mature and the easiest for beginning users to get started with.</p>
+
+<h3 id="containerd-alpha-by-docker:cb6baf67dddd3a71c07abfd705dc7d4b">Containerd (Alpha) - By Docker</h3>
+
+<p>See <a href="https://containerd.tools/">containerd.tools</a> - Spinning out the Docker Daemon into a more advanced and OCI compliant Daemon to control runC.</p>
+
+<p>Uses <a href="http://www.grpc.io/">GRPC</a></p>
+
+<blockquote>
+<p>A high performance, open source, general RPC framework that puts mobile and HTTP/2 first.</p>
+</blockquote>
+
+<p>Containerd is the plumbing component that will manage containers in a future version of Docker Engine.</p>
+
+<pre><code>curl -Lo /usr/local/bin/containerd https://github.com/docker/containerd/releases/download/0.0.5/containerd
+curl -Lo /usr/local/bin/ctr https://github.com/docker/containerd/releases/download/0.0.5/ctr
+curl -Lo /usr/local/bin/containerd-shim https://github.com/docker/containerd/releases/download/0.0.5/containerd-shim
+chmod +x /usr/local/bin/{containerd,ctr,containerd-shim}
+
+nohup containerd &gt;/dev/null 2&gt;&amp;1 &amp;
+</code></pre>
+
+<p>Create redis image using Docker to pull from hub</p>
+
+<pre><code> mkdir -p redis/rootfs
+ docker pull redis
+ tmpredis=$(docker create redis)
+ docker export $tmpredis | tar -C redis/rootfs -xf -
+ docker rm $tmpredis 
+</code></pre>
+
+<p>Prepare the OCI bundle:</p>
+
+<p>generate <code>config.json</code></p>
+
+<pre><code>runc spec
+</code></pre>
+
+<p>edit <code>config.json</code>:</p>
+
+<ul>
+<li>terminal: false</li>
+<li>populate uid &amp; guid</li>
+<li>set <code>args</code>: &ldquo;redis-server&rdquo;, &ldquo;&ndash;bind&rdquo;, &ldquo;0.0.0.0&rdquo;</li>
+<li>set correct <code>cwd</code></li>
+</ul>
+
+<p>edit <code>runtime.json</code>:</p>
+
+<ul>
+<li>remove <code>network</code> namespace for now to allow easy connections from localhost for testing&hellip;</li>
+</ul>
+
+<p>see <a href="https://github.com/docker/containerd/blob/0.0.5/docs/bundle.md"><code>config.json</code> &amp; <code>runtime.json</code></a> from <code>containerd</code> repository</p>
+
+<p>Or generate bundles from Docker container definittions with <a href="https://github.com/jfrazelle/riddler">jfrazelle/riddler</a></p>
+
+<h3 id="oci-opencontainers-initiative:cb6baf67dddd3a71c07abfd705dc7d4b">OCI (OpenContainers Initiative)</h3>
+
+<p>OCI currently only covers the Runtime</p>
+
+<p>Doesn&rsquo;t cover how an image is defined, may cover Identity confirmation</p>
+
+<p>Docker provided tech draft and implementation of OCI in runC (moving libcontainer to runC in the process).</p>
+
+<ul>
+<li>OCI? (simple tarballs of the layers+metadata being pushed)</li>
+</ul>
+
+<p><a href="https://www.opencontainers.org/faq#n9">OCI and link with AppC?</a></p>
+
+<p>The individuals behind the appc effort are joining the technical leadership of the OCI, and our intention is to work towards both a common format that is compatible with existing container formats as well as to work on a future spec that combines the best elements of all the existing container efforts.</p>
+
+<p>See also <a href="https://coreos.com/blog/making-sense-of-standards/">CoreOS announcement</a> &amp; <a href="https://blog.docker.com/2015/12/progress-report-open-container-initiative/">Docker announcement</a></p>
+
+<blockquote>
+<p>Creating and maintaining formal specifications (&ldquo;OCI Specifications&rdquo;) for container image formats and runtime, which will allow a compliant container to be portable across all major, compliant operating systems and platforms without artificial technical barriers.</p>
+</blockquote>
+
+<p>The idea behind OCI was to take the widely deployed runtime and image format implementation from docker and build an open standard in the spirit of appc.</p>
+
+<h3 id="appc-by-coreos:cb6baf67dddd3a71c07abfd705dc7d4b">AppC - By CoreOS</h3>
+
+<p><a href="https://www.youtube.com/watch?v=M6B9BMYciIw">Ref (June 2015)</a>
+<a href="https://www.youtube.com/watch?v=et7BCV_kAUY">Ref (Nov 2015)</a></p>
+
+<ul>
+<li>Image format (ACI) and Identity, initially based on Docker image format</li>
+<li>Container Signing</li>
+<li>Discovery mechanism allowing to easily store images and find where the images are (no default registry, no special registry)</li>
+<li>Runtime environment: defined behavior on running the images.</li>
+<li>Tooling: No fancy tooling required. For example, building is easy with command line tools <code>tar</code>, <code>gzip</code> and <code>gpg</code> to sign them</li>
+</ul>
+
+<h4 id="image-format:cb6baf67dddd3a71c07abfd705dc7d4b">Image Format</h4>
+
+<p>ACI (ref AMI) needs to contain all files and metadata needed to execute a given app.</p>
+
+<p>Notable difference with Docker: ACIs need to specify the mount points&hellip;</p>
+
+<p>Docker doesn&rsquo;t require you to specify the volumes, it gives flexibility but you can&rsquo;t read the image manifest and know all the required mountpoints.
+AppC can force volumes to be defined at run time and fail if they have been omitted.</p>
+
+<ul>
+<li><p>rootfs: Same as in Docker image format. Could be an existing system, tarred up. Could be generated with <code>docker build</code>. Could be build with native system tools Debian/Redhat tools to build full systems in a chroot.</p></li>
+
+<li><p>image manifest: all defined fields defined on the AppC repo. Key points are the concept of labels could be used to define the kernel requirements (Containers share the kernel) and explicit requirement on mountpoint definitions.</p></li>
+</ul>
+
+<p>Images should be content addressable and share layers.</p>
+
+<h4 id="discovery-mechanism:cb6baf67dddd3a71c07abfd705dc7d4b">Discovery Mechanism</h4>
+
+<p>Translates an ACI name into a download-able image. All ACIs must have a detached signature and do a verification process.</p>
+
+<p>Could be by convention using a template on the runtime.</p>
+
+<p>Could be by probing a metadata endpoint to retrieve the discovery mechanism (if you want to use a different protocol, for example bittorrent to distribute your images)</p>
+
+<h4 id="runtime-environment:cb6baf67dddd3a71c07abfd705dc7d4b">Runtime Environment</h4>
+
+<p>AppC defines how ACIs are executed on a host. Fundamental concept is to allow multiple images to be running inside a container and define recovery policy for each image instance within the container.</p>
+
+<p>Defines:</p>
+
+<ul>
+<li>FileSystem layout: uses the concept of Pod = ability to compose a collection of containers into a single execution unit.</li>
+<li>Volumes: There is a specific requirement to specify all mountPoints and it is the executer task to do that</li>
+<li>Networking (CNI): network plugins</li>
+<li>Resource Isolators: all cgroups should be defined when executing a container</li>
+<li>Logging: Runtime is responsible for having logs for all the Pods and the containers running in them</li>
+</ul>
+
+<h4 id="tooling:cb6baf67dddd3a71c07abfd705dc7d4b">Tooling</h4>
+
+<p>Providing <code>actool</code> which allows you to <code>actool build</code>, <code>actool cat-manifest</code>, <code>actool validate</code> &hellip;</p>
+
+<p>You can build with <code>actool</code> or the commandline tool listed above</p>
+
+<p>Runtime may be able to convert Docker images on the fly, or you could use tools such as <code>docker2aci</code> to convert Docker images, <code>deb2aci</code> to convert packages &hellip; for you.</p>
+
+<p>Image content verification, initial naive implementation is to use detached gpg signatures (basically you define what publicly signed hash you expect when downloading things over the internet), which is not ideal.</p>
+
+<p>Upcoming standard for image verification is The Update Framework (TUF), which is adopted by Docker through Notary. TUF is similar to yum index / apt repo. Essentially a JSON file providing metadata of all images in a registry together with cryptographic metadata for verification once downloaded.</p>
+
+<h3 id="existing-implementations-of-appc:cb6baf67dddd3a71c07abfd705dc7d4b">Existing Implementations of AppC</h3>
+
+<h4 id="rkt:cb6baf67dddd3a71c07abfd705dc7d4b">rkt</h4>
+
+<p>works in 3 stages:</p>
+
+<ul>
+<li>stage0: get the image, unpack, verify, ..</li>
+<li>stage1: runs the image (with nspawn) - currently launch systemd init system, processes run directly in process tree under assigned cgroup (not via a daemon).</li>
+<li>stage2: applying the isolators</li>
+</ul>
+
+<p><a href="https://youtu.be/et7BCV_kAUY?t=1237">Comparison vs rkt &amp; Docker:</a></p>
+
+<!-- 
+## Other Material
+
+ - [Docker Internals](https://docs.google.com/presentation/d/1juVgXiLTM-ZmAmYBOshNwhBABkUqwIxVodHZwq-0eGg)
+
+-->
+
+                </div>
+            </div>
+        </div>
+    </article>
+
+    <hr>
+    
+    <footer>
+        <div class="container">
+            <div class="row">
+                <div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+                  <ul class="list-inline text-center">
+                    <li>
+                      <a href="mailto:docker-saigon@gmail.com">
+                        <span class="fa-stack fa-lg">
+                          <i class="fa fa-circle fa-stack-2x"></i>
+                          <i class="fa fa-envelope-o fa-stack-1x fa-inverse"></i>
+                        </span>
+                      </a>
+                    </li>
+                    
+                    <li>
+                      <a href="https://twitter.com/docker_saigon">
+                        <span class="fa-stack fa-lg">
+                          <i class="fa fa-circle fa-stack-2x"></i>
+                          <i class="fa fa-twitter fa-stack-1x fa-inverse"></i>
+                        </span>
+                      </a>
+                    </li>
+                    
+                    <li>
+                      <a href="https://www.youtube.com/channel/UC1t_GbTJudAAK9Wqkg6-uLw">
+                        <span class="fa-stack fa-lg">
+                          <i class="fa fa-circle fa-stack-2x"></i>
+                          <i class="fa fa-youtube fa-stack-1x fa-inverse"></i>
+                        </span>
+                      </a>
+                    </li>
+                    
+                    <li>
+                      <a href="https://github.com/docker-saigon">
+                        <span class="fa-stack fa-lg">
+                          <i class="fa fa-circle fa-stack-2x"></i>
+                          <i class="fa fa-github fa-stack-1x fa-inverse"></i>
+                        </span>
+                      </a>
+                    </li>
+                    
+                    <li>
+                      <a href="https://www.facebook.com/DockerSaigon">
+                        <span class="fa-stack fa-lg">
+                          <i class="fa fa-circle fa-stack-2x"></i>
+                          <i class="fa fa-facebook fa-stack-1x fa-inverse"></i>
+                        </span>
+                      </a>
+                    </li>
+                    
+                  </ul>
+                  <p class="copyright text-muted">Code released under the Apache 2.0 license.</p>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    
+    <script src="http://docker-saigon.github.io/js/jquery.min.js"></script>
+
+    
+    <script src="http://docker-saigon.github.io/js/bootstrap.min.js"></script>
+
+    
+    <script src="http://docker-saigon.github.io/js/clean-blog.js"></script>
+
+    
+<script>
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+    (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+    m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+  ga('create', 'UA-69412248-1', 'auto');
+  ga('send', 'pageview');
+</script>
+
+
+</body>
+
+</html>
+

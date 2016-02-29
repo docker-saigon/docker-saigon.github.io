@@ -18,6 +18,11 @@
   </url>
   
   <url>
+    <loc>http://docker-saigon.github.io/post/Docker-Internals/</loc>
+    <lastmod>2016-02-29T13:59:25+07:00</lastmod>
+  </url>
+  
+  <url>
     <loc>http://docker-saigon.github.io/post/welcome/</loc>
     <lastmod>2015-10-08T12:36:02+07:00</lastmod>
   </url>
