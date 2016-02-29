@@ -67,7 +67,7 @@
 &lt;li&gt;Containers feel like lightweight VMs (lower footprint, faster), but are &lt;strong&gt;not Virtual Machines!&lt;/strong&gt;&lt;/li&gt;
 &lt;/ul&gt;
 
-&lt;p&gt;Components of a container &lt;strong&gt;ecosystem&lt;/strong&gt;:&lt;/p&gt;
+&lt;p&gt;Components of a container &lt;strong&gt;ecosystem&lt;/strong&gt; include:&lt;/p&gt;
 
 &lt;ul&gt;
 &lt;li&gt;Runtime&lt;/li&gt;
@@ -75,7 +75,7 @@
 &lt;li&gt;Tooling&lt;/li&gt;
 &lt;/ul&gt;
 
-&lt;p&gt;Now&amp;hellip; if you look in the Linux &lt;code&gt;kernel&lt;/code&gt;, there is no such thing as a container&amp;hellip;&lt;/p&gt;
+&lt;p&gt;Now&amp;hellip; if you look in the Linux &lt;code&gt;kernel&lt;/code&gt;, there is no such thing as a container&amp;hellip; so what gives?&lt;/p&gt;
 
 &lt;h3 id=&#34;history-of-container-technology:cb6baf67dddd3a71c07abfd705dc7d4b&#34;&gt;History of Container Technology&lt;/h3&gt;
 
@@ -93,11 +93,11 @@
 &lt;ul&gt;
 &lt;li&gt;built on &lt;strong&gt;LXC&lt;/strong&gt;&lt;/li&gt;
 &lt;li&gt;moved to &lt;strong&gt;libcontainer&lt;/strong&gt; (March 2014)&lt;/li&gt;
-&lt;li&gt;&lt;strong&gt;appC&lt;/strong&gt; (CoreOS) announced (December 2015)&lt;/li&gt;
-&lt;li&gt;Open Containers standard for convergence with Docker Announced (June 2015)&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;appC&lt;/strong&gt; (CoreOS) announced (December 2014)&lt;/li&gt;
+&lt;li&gt;Open Containers standard for &lt;strong&gt;convergence&lt;/strong&gt; with Docker Announced (June 2015)&lt;/li&gt;
 &lt;li&gt;moved to &lt;strong&gt;runC&lt;/strong&gt; (OCF compliant) (July 2015)&lt;/li&gt;
 &lt;/ul&gt;&lt;/li&gt;
-&lt;li&gt;&amp;hellip; many more container formats are coming&lt;/li&gt;
+&lt;li&gt;&amp;hellip; many more container formats coming?&lt;/li&gt;
 &lt;/ul&gt;
 
 &lt;p&gt;&lt;a href=&#34;http://www.slideshare.net/jkshah/postgresql-and-linux-containers&#34;&gt;Reference slide deck&lt;/a&gt;&lt;/p&gt;
@@ -114,7 +114,7 @@
 
 &lt;p&gt;Package managers provide an easy way to find out what is inside the packages. If you are wondering how to handle this with Container Images&amp;hellip;&lt;/p&gt;
 
-&lt;p&gt;See the &lt;a href=&#34;https://github.com/docker/community/blob/master/DockerCon/DockerCon%20EU%202015.md&#34;&gt;Dockercon EU talks&lt;/a&gt; where a system of meta data tags were suggested for image inspection. See &lt;a href=&#34;https://youtu.be/j4SZ1qoR8Hs&#34;&gt;Shipping Manifests, Bill of Lading and Docker Metadata and Container - Video&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;See the &lt;a href=&#34;https://github.com/docker/community/blob/master/DockerCon/DockerCon%20EU%202015.md&#34;&gt;Dockercon EU talks&lt;/a&gt; where a system of meta data tags was suggested for image inspection. See &lt;a href=&#34;https://youtu.be/j4SZ1qoR8Hs&#34;&gt;Shipping Manifests, Bill of Lading and Docker Metadata and Containers - Video&lt;/a&gt;&lt;/p&gt;
 
 &lt;h3 id=&#34;how-do-containers-compare-to-configuration-management:cb6baf67dddd3a71c07abfd705dc7d4b&#34;&gt;How do containers compare to Configuration Management?&lt;/h3&gt;
 
@@ -554,7 +554,7 @@ EOF
 &lt;li&gt;&lt;a href=&#34;http://linux.die.net/man/7/capabilities&#34;&gt;Capabilities&lt;/a&gt;&lt;/li&gt;
 &lt;/ul&gt;
 
-&lt;p&gt;Currently no examples provided in this document&amp;hellip; This is subject of further study.&lt;/p&gt;
+&lt;p&gt;Currently no examples provided in this document&amp;hellip; This is subject for further study.&lt;/p&gt;
 
 &lt;h3 id=&#34;types-of-containers:cb6baf67dddd3a71c07abfd705dc7d4b&#34;&gt;Types of Containers&lt;/h3&gt;
 
@@ -592,7 +592,7 @@ EOF
 
 &lt;p&gt;&lt;img src=&#34;http://docker-saigon.github.io/img/image-layers.jpg&#34; alt=&#34;&#34; /&gt;&lt;/p&gt;
 
-&lt;p&gt;When the container starts, the Docker engine prepares the rootfs &amp;amp; uses &lt;code&gt;chroot&lt;/code&gt; for the container filesystem isolation - similar to LXC. The real innovation of the Docker engine was the leveraging Copy-On-Write file systems to significantly speed up the preparation of the rootfs.&lt;/p&gt;
+&lt;p&gt;When the container starts, the Docker engine prepares the rootfs &amp;amp; uses &lt;code&gt;chroot&lt;/code&gt; for the container filesystem isolation - similar to LXC. One big innovation of the Docker engine was the concept of leveraging Copy-On-Write file systems to significantly speed up the preparation of the rootfs.&lt;/p&gt;
 
 &lt;h3 id=&#34;copy-on-write:cb6baf67dddd3a71c07abfd705dc7d4b&#34;&gt;Copy-On-Write&lt;/h3&gt;
 

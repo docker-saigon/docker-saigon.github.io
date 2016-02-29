@@ -155,7 +155,7 @@
 <li>Containers feel like lightweight VMs (lower footprint, faster), but are <strong>not Virtual Machines!</strong></li>
 </ul>
 
-<p>Components of a container <strong>ecosystem</strong>:</p>
+<p>Components of a container <strong>ecosystem</strong> include:</p>
 
 <ul>
 <li>Runtime</li>
@@ -163,7 +163,7 @@
 <li>Tooling</li>
 </ul>
 
-<p>Now&hellip; if you look in the Linux <code>kernel</code>, there is no such thing as a container&hellip;</p>
+<p>Now&hellip; if you look in the Linux <code>kernel</code>, there is no such thing as a container&hellip; so what gives?</p>
 
 <h3 id="history-of-container-technology:cb6baf67dddd3a71c07abfd705dc7d4b">History of Container Technology</h3>
 
@@ -181,11 +181,11 @@
 <ul>
 <li>built on <strong>LXC</strong></li>
 <li>moved to <strong>libcontainer</strong> (March 2014)</li>
-<li><strong>appC</strong> (CoreOS) announced (December 2015)</li>
-<li>Open Containers standard for convergence with Docker Announced (June 2015)</li>
+<li><strong>appC</strong> (CoreOS) announced (December 2014)</li>
+<li>Open Containers standard for <strong>convergence</strong> with Docker Announced (June 2015)</li>
 <li>moved to <strong>runC</strong> (OCF compliant) (July 2015)</li>
 </ul></li>
-<li>&hellip; many more container formats are coming</li>
+<li>&hellip; many more container formats coming?</li>
 </ul>
 
 <p><a href="http://www.slideshare.net/jkshah/postgresql-and-linux-containers">Reference slide deck</a></p>
@@ -202,7 +202,7 @@
 
 <p>Package managers provide an easy way to find out what is inside the packages. If you are wondering how to handle this with Container Images&hellip;</p>
 
-<p>See the <a href="https://github.com/docker/community/blob/master/DockerCon/DockerCon%20EU%202015.md">Dockercon EU talks</a> where a system of meta data tags were suggested for image inspection. See <a href="https://youtu.be/j4SZ1qoR8Hs">Shipping Manifests, Bill of Lading and Docker Metadata and Container - Video</a></p>
+<p>See the <a href="https://github.com/docker/community/blob/master/DockerCon/DockerCon%20EU%202015.md">Dockercon EU talks</a> where a system of meta data tags was suggested for image inspection. See <a href="https://youtu.be/j4SZ1qoR8Hs">Shipping Manifests, Bill of Lading and Docker Metadata and Containers - Video</a></p>
 
 <h3 id="how-do-containers-compare-to-configuration-management:cb6baf67dddd3a71c07abfd705dc7d4b">How do containers compare to Configuration Management?</h3>
 
@@ -642,7 +642,7 @@ EOF
 <li><a href="http://linux.die.net/man/7/capabilities">Capabilities</a></li>
 </ul>
 
-<p>Currently no examples provided in this document&hellip; This is subject of further study.</p>
+<p>Currently no examples provided in this document&hellip; This is subject for further study.</p>
 
 <h3 id="types-of-containers:cb6baf67dddd3a71c07abfd705dc7d4b">Types of Containers</h3>
 
@@ -680,7 +680,7 @@ EOF
 
 <p><img src="http://docker-saigon.github.io/img/image-layers.jpg" alt="" /></p>
 
-<p>When the container starts, the Docker engine prepares the rootfs &amp; uses <code>chroot</code> for the container filesystem isolation - similar to LXC. The real innovation of the Docker engine was the leveraging Copy-On-Write file systems to significantly speed up the preparation of the rootfs.</p>
+<p>When the container starts, the Docker engine prepares the rootfs &amp; uses <code>chroot</code> for the container filesystem isolation - similar to LXC. One big innovation of the Docker engine was the concept of leveraging Copy-On-Write file systems to significantly speed up the preparation of the rootfs.</p>
 
 <h3 id="copy-on-write:cb6baf67dddd3a71c07abfd705dc7d4b">Copy-On-Write</h3>
 
