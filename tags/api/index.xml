@@ -833,6 +833,8 @@ lxc-stop -n mycontainer
 lxc-destroy -n mycontainer
 &lt;/code&gt;&lt;/pre&gt;
 
+&lt;p&gt;Interesting Read: &lt;a href=&#34;https://www.hastexo.com/blogs/florian/2016/02/21/containers-just-because-everyone-else/&#34;&gt;Linux Containers without Docker using OverlayFS &amp;amp; Ansible&lt;/a&gt;.&lt;/p&gt;
+
 &lt;h3 id=&#34;systemd-nspawn:cb6baf67dddd3a71c07abfd705dc7d4b&#34;&gt;Systemd-nspawn&lt;/h3&gt;
 
 &lt;p&gt;Originally created to debug the Systemd init system, future versions to be more integrated in the core of the OS (the most low-level and minimal approach to make containers native to the OS).&lt;/p&gt;
@@ -1012,6 +1014,9 @@ runc start debian
 &lt;p&gt;Uses: &lt;a href=&#34;https://github.com/samalba/dockerclient&#34;&gt;samalba/dockerclient&lt;/a&gt;&lt;/p&gt;
 
 &lt;p&gt;Code: &lt;a href=&#34;https://github.com/ehazlett/interlock/blob/master/server/server.go#L174-L205&#34;&gt;How this triggers extension reloads using a TTL Cache&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
+
+&lt;li&gt;&lt;p&gt;Monitoring with &lt;code&gt;docker stats&lt;/code&gt; and the API behind it? &lt;a href=&#34;https://github.com/google/cadvisor/tree/master/container&#34;&gt;cAdvisor?&lt;/a&gt;
+ more about monitoring: &lt;a href=&#34;https://www.youtube.com/watch?v=sxE1vDtkYps&amp;amp;feature=youtu.be&#34;&gt;https://www.youtube.com/watch?v=sxE1vDtkYps&amp;amp;feature=youtu.be&lt;/a&gt;&lt;/p&gt;&lt;/li&gt;
 &lt;/ul&gt;
 
 &lt;h3 id=&#34;docker-registry:cb6baf67dddd3a71c07abfd705dc7d4b&#34;&gt;Docker Registry&lt;/h3&gt;
@@ -1071,6 +1076,23 @@ runc start debian
 &lt;blockquote&gt;
 &lt;p&gt;A high performance, open source, general RPC framework that puts mobile and HTTP/2 first.&lt;/p&gt;
 &lt;/blockquote&gt;
+
+&lt;!-- 
+See also?: https://github.com/gengo/grpc-gateway &amp; twitter conv: https://twitter.com/kelseyhightower/status/704914665969733633
+The etcd v3 API leverages gRPC for efficient watches and to reduce memory and CPU usage. 
+
+https://twitter.com/hashtag/grpc?src=hash
+https://www.eventbrite.com/e/grpc-community-meetup-tickets-22059237774
+https://coreos.com/blog/gRPC-protobufs-swagger.html
+
+Nice to see protobuf add initial support for Javascript — works in browsers and in node.js. https://github.com/google/protobuf/releases/tag/v3.0.0-beta-2 …
+
+It should also be noted that you can store full JSON/YAML/XML blobs in etcd and consul. Use a single key named app.conf and call it a day.
+
+Now that rkt has reached 1.0 we need to have a talk about container runtimes vs application management platforms.
+
+
+--&gt;
 
 &lt;p&gt;Containerd is the plumbing component that will manage containers in a future version of Docker Engine.&lt;/p&gt;
 

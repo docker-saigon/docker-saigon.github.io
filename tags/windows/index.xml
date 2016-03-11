@@ -1,0 +1,535 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Windows on Docker Saigon</title>
+    <link>http://docker-saigon.github.io/tags/windows/</link>
+    <description>Recent content in Windows on Docker Saigon</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en-us</language>
+    <copyright>Code released under the Apache 2.0 license.</copyright>
+    <lastBuildDate>Fri, 11 Mar 2016 10:29:20 +0700</lastBuildDate>
+    <atom:link href="http://docker-saigon.github.io/tags/windows/index.xml" rel="self" type="application/rss+xml" />
+    
+    <item>
+      <title>Swarm week 2016 - Part 1: Cluster Setup</title>
+      <link>http://docker-saigon.github.io/post/Swarm-Week-2016-Part1/</link>
+      <pubDate>Fri, 11 Mar 2016 10:29:20 +0700</pubDate>
+      
+      <guid>http://docker-saigon.github.io/post/Swarm-Week-2016-Part1/</guid>
+      <description>
+
+&lt;p&gt;In this post we will be creating a local &lt;code&gt;Swarm&lt;/code&gt; cluster running in VMs on &lt;code&gt;Boot2Docker&lt;/code&gt;.&lt;/p&gt;
+
+&lt;p&gt;We will be using &lt;code&gt;Consul&lt;/code&gt; as a kvstore for:&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;node discovery &amp;amp; overlay networking,&lt;/li&gt;
+&lt;li&gt;swarm leader election, and&lt;/li&gt;
+&lt;li&gt;as a config store for other cluster components (i.e Interlock config).&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;Swarm makes use of the &lt;a href=&#34;https://github.com/docker/libkv&#34;&gt;libkv&lt;/a&gt; library to support multiple store backends (&lt;code&gt;etcd&lt;/code&gt;,&lt;code&gt;zookeeper&lt;/code&gt;,..).&lt;/p&gt;
+
+&lt;p&gt;All Docker Engines will be created through &lt;code&gt;Docker-Machine&lt;/code&gt; with TLS enabled. Additionally, we will see &lt;strong&gt;how to configure Boot2Docker with a static IP&lt;/strong&gt; and install the &lt;a href=&#34;https://github.com/gondor/docker-volume-netshare&#34;&gt;netshare&lt;/a&gt; &lt;code&gt;Volume Driver&lt;/code&gt; to &lt;strong&gt;mount VM host folders across all cluster nodes for persistence&lt;/strong&gt; - allowing any statefull containers to be re-scheduled on different nodes without loss of data.&lt;/p&gt;
+
+&lt;p&gt;In a future post, we will look at deploying and scaling the &lt;a href=&#34;https://github.com/docker/swarm-microservice-demo-v1&#34;&gt;sample voting app&lt;/a&gt; on top of this cluster with &lt;code&gt;Docker-Compose&lt;/code&gt;, using the latest &lt;code&gt;Interlock&lt;/code&gt; images with TLS authentication for communication with Swarm.&lt;/p&gt;
+
+&lt;p&gt;In the sample set-up in this first part, we will be using a &lt;strong&gt;single-node&lt;/strong&gt; Consul cluster and a &lt;strong&gt;single-node&lt;/strong&gt; Swarm-manager cluster. For High Availability we would need to deploy several Consul nodes and Swarm-Manager replicas behind a load balancer, which may be explored in a future post.&lt;/p&gt;
+
+&lt;p&gt;Finally, automation of all the manual steps using &lt;a href=&#34;nathanleclaire.com/blog/2015/11/10/using-ansible-with-docker-machine-to-bootstrap-host-nodes/&#34;&gt;Ansible containers&lt;/a&gt; would be the perfect conclusion of this series.&lt;/p&gt;
+
+&lt;p&gt;We will be using Windows 10, Hyper-V and PowerShell for this setup, but it should be possible to repeat a similar setup on OSX (replacing CIFS by NFS in the netshare, for example).&lt;/p&gt;
+
+&lt;h2 id=&#34;windows-10-environment-setup:e3eed6f67421eff48e81c37460ec6ac3&#34;&gt;Windows 10 Environment Setup&lt;/h2&gt;
+
+&lt;p&gt;The quickest way to get everything ready on Windows would be by installing &lt;a href=&#34;https://github.com/git-for-windows&#34;&gt;git-for-windows&lt;/a&gt; and the &lt;a href=&#34;https://www.docker.com/products/docker-toolbox&#34;&gt;Docker Toolbox&lt;/a&gt; (VirtualBox).&lt;/p&gt;
+
+&lt;p&gt;However, &lt;strong&gt;if you are required use the Hyper-V role&amp;hellip;&lt;/strong&gt; - the Docker Toolbox can/should not be used.&lt;/p&gt;
+
+&lt;p&gt;The following steps will guide you how to use &lt;code&gt;docker&lt;/code&gt;, &lt;code&gt;docker-machine&lt;/code&gt; and &lt;code&gt;docker-compose&lt;/code&gt; with Hyper-V on Windows 10 (64 bit):&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;&lt;p&gt;Hyper-V &amp;amp; NAT Setup&lt;/p&gt;
+
+&lt;p&gt;Before &lt;a href=&#34;http://www.thomasmaurer.ch/2015/11/hyper-v-virtual-switch-using-nat-configuration/&#34;&gt;NAT support was added to Hyper-V (Q3 2015)&lt;/a&gt; in Windows 10, it was recommended to &lt;a href=&#34;http://thomasvochten.com/archive/2014/01/hyper-v-nat/&#34;&gt;use VMWare&amp;rsquo;s NAT &amp;amp; DHCP services with Hyper-V&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;It is also a possible to use Internet Connection Sharing (ICS) with you Virtual Network, but I strongly advise against it. ICS requires manual re-configuration when switching between Ethernet and WiFi adapters, which is not suitable.&lt;/p&gt;
+
+&lt;p&gt;At the time of writing, I still prefer to use the VMWare networking services with Hyper-V as it provides the most features. You could even extract the &lt;code&gt;vmnetconfig.exe&lt;/code&gt; UI tool from the VMWare Workstation installation source to easily manage your virtual networks (after only installing VMWare Player components):
+ &lt;img src=&#34;http://docker-saigon.github.io/img/hyper-v-vmnetconf.png&#34; alt=&#34;vmnetconf&#34; /&gt;&lt;/p&gt;
+
+&lt;p&gt;The VM networking services provided by the VMWare tools also include a DNS server which forwards any DNS requests from VMs to the host machine. This means that you only need to maintain the &lt;code&gt;etc/hosts&lt;/code&gt; file centrally on the Hyper-V host for easy, IP-less, inter-VM communication.&lt;/p&gt;
+
+&lt;p&gt;Before we move on, note down the name of your Virtual Switch configured with VMWare NAT, mine is &lt;code&gt;VMWare Nat&lt;/code&gt;.&lt;/p&gt;
+
+&lt;p&gt;If you decide to use the new NAT switches supported by Hyper-V on Windows 10, you will still need to find a solution for &lt;a href=&#34;https://4sysops.com/archives/native-nat-in-windows-10-hyper-v-using-a-nat-virtual-switch/#dhcp-server-for-windows&#34;&gt;DHCP&lt;/a&gt; as well as &lt;a href=&#34;http://unbound.net/index.html&#34;&gt;DNS&lt;/a&gt;.&lt;/p&gt;&lt;/li&gt;
+
+&lt;li&gt;&lt;p&gt;Git, ssh, scp, openssl, &amp;hellip;&lt;/p&gt;
+
+&lt;p&gt;Installing &lt;a href=&#34;https://github.com/git-for-windows&#34;&gt;git-for-windows&lt;/a&gt; is mandatory for a decent console experience on Windows. The git-for-windows bundle also removes the need for putty, plink &amp;amp; pageant when working with remote Linux machines.&lt;/p&gt;
+
+&lt;p&gt;Even though the Windows 10 console has greatly improved (transparency, multi-line selections, full-screen mode, &lt;code&gt;CTRL+C/V&lt;/code&gt; support, &amp;hellip;), I still recommend the usage of &lt;a href=&#34;https://conemu.github.io/&#34;&gt;ConEmu&lt;/a&gt; as it has more features (quickly splitting console panels, switching between consoles, configurable short-cuts, &amp;hellip;).&lt;/p&gt;&lt;/li&gt;
+
+&lt;li&gt;&lt;p&gt;Docker setup&lt;/p&gt;
+
+&lt;p&gt;In a bash console, execute the following commands:&lt;/p&gt;
+
+&lt;p&gt;Download the &lt;code&gt;docker&lt;/code&gt; Windows 64 bit binary:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt; curl -Lo /usr/bin/docker.exe https://get.docker.com/builds/Windows/x86_64/docker-1.10.3.exe
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Download &lt;code&gt;docker-machine&lt;/code&gt; Windows 64 bit binary (includes hyperv driver)&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt; curl -Lo /usr/bin/docker-machine.exe https://github.com/docker/machine/releases/download/v0.6.0/docker-machine-Windows-x86_64.exe
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Download &lt;code&gt;docker-compose&lt;/code&gt; Windows 64 bit binary&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt; curl -Lo /usr/bin/docker-compose.exe https://github.com/docker/compose/releases/download/1.6.2/docker-compose-Windows-x86_64.exe
+&lt;/code&gt;&lt;/pre&gt;&lt;/li&gt;
+
+&lt;li&gt;&lt;p&gt;PowerShell set-up&lt;/p&gt;
+
+&lt;p&gt;To control Hyper-V, PowerShell needs to have Administrative privileges. in ConEmu pressing &lt;code&gt;WINDOWS+SHIFT+W&lt;/code&gt; allows you to quickly create such a session:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&#34;http://docker-saigon.github.io/img/powershell-admin.png&#34; alt=&#34;PowerShell Admin&#34; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Make sure your &lt;code&gt;$PATH&lt;/code&gt; environment variable includes the &lt;code&gt;/usr/bin/&lt;/code&gt; directory where we downloaded all the binaries earlier:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt; $env:Path.Contains(&amp;quot;$env:LOCALAPPDATA\Programs\Git\usr\bin&amp;quot;)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Should return &lt;code&gt;True&lt;/code&gt;.&lt;/p&gt;
+
+&lt;p&gt;Confirm the Docker tools are working:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt; docker --version; docker-machine --version; docker-compose --version
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Should return something similar to the following:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt; Docker version 1.10.3, build 20f81dd
+ docker-machine.exe version 0.6.0, build e27fb87
+ docker-compose version 1.6.2, build e80fc83
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;During this guide, we will use aliases as follows:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt; New-Alias &amp;quot;dm&amp;quot; &amp;quot;docker-machine&amp;quot;
+&lt;/code&gt;&lt;/pre&gt;&lt;/li&gt;
+
+&lt;li&gt;&lt;p&gt;Shared Folder Set-up&lt;/p&gt;
+
+&lt;p&gt;For this demo we assume a &lt;code&gt;demo&lt;/code&gt; user with password &lt;code&gt;demo&lt;/code&gt; is created on the Hyper-V host and a folder share accessible to this user exists under the name &lt;code&gt;demo&lt;/code&gt;.&lt;/p&gt;&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h2 id=&#34;set-up-the-key-value-store:e3eed6f67421eff48e81c37460ec6ac3&#34;&gt;Set up the Key Value Store&lt;/h2&gt;
+
+&lt;p&gt;We will run Consul using a Docker machine. After provisioning the machine, we will configure a static IP, launch the Consul container and confirm Consul is working.&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;&lt;p&gt;Provision the &lt;code&gt;consul0&lt;/code&gt; machine&lt;/p&gt;
+
+&lt;p&gt;Generic command:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;docker-machine create consul0
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;In PowerShell using Hyper-V and setting custom memory:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;dm create `
+ --driver hyperv `
+ --hyperv-virtual-switch &amp;quot;VMWare NAT&amp;quot; `
+ --hyperv-memory &amp;quot;512&amp;quot; consul0
+&lt;/code&gt;&lt;/pre&gt;&lt;/li&gt;
+
+&lt;li&gt;&lt;p&gt;Set a Static IP (&lt;a href=&#34;https://github.com/docker/machine/issues/1709&#34;&gt;ref&lt;/a&gt;) and reboot the machine.&lt;/p&gt;
+
+&lt;p&gt;In this sample setup, VMs use the &lt;code&gt;192.168.233.0/24&lt;/code&gt; subnet with the NAT gateway on &lt;code&gt;192.168.233.2&lt;/code&gt; and a DHCP range of &lt;code&gt;128-254&lt;/code&gt;. We will assign &lt;code&gt;192.168.233.5&lt;/code&gt; as the static IP for our Consul node. Keep in mind you may need to update these values to match your configuration.&lt;/p&gt;
+
+&lt;p&gt;By default, DHCP is enabled on the Boot2Docker interfaces, but we may disable it by killing the process managing a particular interface:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;kill `more /var/run/udhcpc.eth0.pid`
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Do not run the following commands on the Boot2Docker VM just yet, we will add them to the boot process at a later stage.&lt;/p&gt;
+
+&lt;p&gt;To set a static IP and ensure a default route to the gateway, we would use the following 2 commands:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;ifconfig eth0 192.168.233.10 netmask 255.255.255.0 broadcast 192.168.233.255 up
+route add default gw 192.168.233.2
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;If we weren&amp;rsquo;t using PowerShell, We may add the above commands to the boot script as follows (quote the heredoc label to avoid backticks from being evaluated):&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;cat &amp;lt;&amp;lt;&amp;quot;EOF&amp;quot; | sudo tee /var/lib/boot2docker/bootsync.sh
+kill `more /var/run/udhcpc.eth0.pid`
+ifconfig eth0 192.168.233.10 netmask 255.255.255.0 broadcast 192.168.233.255 up
+route add default gw 192.168.233.2
+EOF
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Or, using PowerShell with a single command from the Host:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;echo &amp;quot;kill ``more /var/run/udhcpc.eth0.pid```n`
+ifconfig eth0 192.168.233.10 netmask 255.255.255.0 broadcast 192.168.233.255 up`n`
+route add default gw 192.168.233.2&amp;quot; | `
+dm ssh consul0 &amp;quot;sudo tee /var/lib/boot2docker/bootsync.sh&amp;quot; &amp;gt; $null
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Bounce the box&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;dm restart consul0
+&lt;/code&gt;&lt;/pre&gt;&lt;/li&gt;
+
+&lt;li&gt;&lt;p&gt;Regenerate the certificates&lt;/p&gt;
+
+&lt;p&gt;Docker-Machine generated certificates are only valid for the old IP, changing the IP requires us to regenerate the certificates:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;dm regenerate-certs consul0
+&lt;/code&gt;&lt;/pre&gt;&lt;/li&gt;
+
+&lt;li&gt;&lt;p&gt;Start Consul&lt;/p&gt;
+
+&lt;p&gt;Docker-Machine helps you manage your environment configuration to target the right Boot2Docker VM:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;docker-machine env consul0
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Activating this environment in PowerShell (using &lt;code&gt;iex&lt;/code&gt; as an alias for &lt;code&gt;Invoke-Expression&lt;/code&gt;), looks as follows:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;dm env consul0 | iex
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Confirm all is working:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;docker info
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Launch a single node Consul container, exposing its DNS and the Consul API:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;docker run -d -p 192.168.233.10:8500:8500 -p 192.168.233.10:53:8600/udp --name consul -h consul --restart always gliderlabs/consul-server -bootstrap
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Follow the boot process of your Consul node:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;docker logs -f consul
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Press &lt;code&gt;CTRL+C&lt;/code&gt; and add an entry for the static consul IP to your hosts file (if your virtual network forwards DNS queries to your host, this will allow all your nodes to point to the &lt;code&gt;consul0&lt;/code&gt; node by its hostname).&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;&amp;quot;consul0&amp;quot; | `
+% { &amp;quot;$($(Get-VM $_).NetworkAdapters[0].IpAddresses[0]) $_&amp;quot; } | `
+ac $env:Windir\System32\Drivers\etc\hosts
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Confirm Consul works:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;iwr http://consul0:8500/v1/catalog/nodes | ConvertFrom-Json
+&lt;/code&gt;&lt;/pre&gt;&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h2 id=&#34;set-up-the-swarm-manager:e3eed6f67421eff48e81c37460ec6ac3&#34;&gt;Set up the Swarm Manager&lt;/h2&gt;
+
+&lt;p&gt;We will now create a single Swarm Manager (no replication) and use the following &lt;code&gt;Docker-Machine&lt;/code&gt; &lt;a href=&#34;https://docs.docker.com/machine/reference/create/&#34;&gt;flags&lt;/a&gt; to configure our box:&lt;/p&gt;
+
+&lt;p&gt;Swarm flags:&lt;/p&gt;
+
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th&gt;Flag&lt;/th&gt;
+&lt;th&gt;Description&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;--swarm&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;Provision swarm agent, &lt;a href=&#34;https://docs.docker.com/swarm/reference/join/&#34;&gt;see docs&lt;/a&gt;&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;--swarm-master&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;Provision swarm manager, &lt;a href=&#34;https://docs.docker.com/swarm/reference/manage/&#34;&gt;see docs&lt;/a&gt;&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;--swarm-discovery&lt;/code&gt; &amp;nbsp;&lt;/td&gt;
+&lt;td&gt;Discovery method, &lt;a href=&#34;https://docs.docker.com/swarm/reference/manage/#discovery-discovery-backend&#34;&gt;see docs&lt;/a&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;We also specify Engine &lt;a href=&#34;https://docs.docker.com/engine/reference/commandline/daemon&#34;&gt;configuration options&lt;/a&gt; to enable &lt;strong&gt;Node Discovery&lt;/strong&gt; in the created Docker engine, this is required to support overlay networking:&lt;/p&gt;
+
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th&gt;Option&lt;/th&gt;
+&lt;th&gt;Description&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;--cluster-store&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;kvstore URL&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;--cluster-advertise&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;URL for cluster nodes to reach this node, &lt;a href=&#34;https://docs.docker.com/engine/reference/commandline/daemon/#nodes-discovery&#34;&gt;see docs&lt;/a&gt;&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;--cluster-store-opt&lt;/code&gt; &amp;nbsp;&lt;/td&gt;
+&lt;td&gt;additional cluster options&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;Below is an overview of default sockets used by Docker components:&lt;/p&gt;
+
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th&gt;Port&lt;/th&gt;
+&lt;th&gt;Protocol&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td&gt;2375 &amp;nbsp;&lt;/td&gt;
+&lt;td&gt;insecure docker API&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;2376&lt;/td&gt;
+&lt;td&gt;TLS secure docker API&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;3375&lt;/td&gt;
+&lt;td&gt;insecure swarm API&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr&gt;
+&lt;td&gt;3376&lt;/td&gt;
+&lt;td&gt;TLS secure swarm API&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;Combining the above information, this how we may create our Swarm Manager with Docker-Machine using Powershell:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;dm create `
+ --driver hyperv `
+ --hyperv-virtual-switch &amp;quot;VMWare NAT&amp;quot; `
+ --swarm --swarm-master `
+ --swarm-discovery &amp;quot;consul://consul0:8500/cluster1&amp;quot; `
+ --engine-opt &amp;quot;cluster-store consul://consul0:8500&amp;quot; `
+ --engine-opt &amp;quot;cluster-advertise eth0:2376&amp;quot; `
+ --engine-opt &amp;quot;cluster-store-opt kv.path=cluster1/docker/overlay&amp;quot; master0
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Once our box has been provisioned, we can confirm the engine options were applied by looking at the &lt;code&gt;/var/lib/boot2docker/profile&lt;/code&gt;:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;dm ssh master0 cat /var/lib/boot2docker/profile
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;You may have noticed that we specified custom paths for the config store, we can confirm the actual keys stored in consul with the following command:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;iwr http://consul0:8500/v1/kv/?recurse | ConvertFrom-Json | ft Key
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h2 id=&#34;join-nodes-to-the-swarm-cluster:e3eed6f67421eff48e81c37460ec6ac3&#34;&gt;Join Nodes to the Swarm cluster&lt;/h2&gt;
+
+&lt;p&gt;To create the Swarm Nodes, we follow the exact same steps as before, however we do not specify the &lt;code&gt;--swarm-master&lt;/code&gt; flag.&lt;/p&gt;
+
+&lt;p&gt;Additionally, we may attach &lt;a href=&#34;https://docs.docker.com/userguide/labels-custom-metadata/#daemon-labels&#34;&gt;labels&lt;/a&gt; to our nodes depending on the roles we assign to them within our infrastructure:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;dm create `
+ --driver hyperv `
+ --hyperv-virtual-switch &amp;quot;VMWare NAT&amp;quot;`
+ --swarm `
+ --swarm-discovery=&amp;quot;consul://consul0:8500/cluster1&amp;quot; `
+ --engine-opt=&amp;quot;cluster-store=consul://consul0:8500&amp;quot; `
+ --engine-opt=&amp;quot;cluster-advertise=eth0:2376&amp;quot; `
+ --engine-opt=&amp;quot;cluster-store-opt=kv.path=cluster1/docker/overlay&amp;quot; `
+ --engine-label=&amp;quot;com.docker-saigon.group=frontend&amp;quot; `
+ --engine-label &amp;quot;com.docker-saigon.environment=dev&amp;quot; node0
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Don&amp;rsquo;t forget to change the &lt;code&gt;--engine-label&lt;/code&gt; flags when provisioning multiple nodes with different roles&lt;/p&gt;
+
+&lt;p&gt;Confirm the nodes have joined the Swarm&lt;/p&gt;
+
+&lt;p&gt;Look at the consul data:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;iwr http://consul0:8500/v1/kv/?recurse | ConvertFrom-Json | ft Key
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Activate the connection to the Swarm cluster:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;dm env --swarm master0 | iex
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;&lt;strong&gt;Note:&lt;/strong&gt; The usage of the &lt;code&gt;--swarm&lt;/code&gt; flag!&lt;/p&gt;
+
+&lt;p&gt;Once the nodes become available, install the &lt;a href=&#34;https://github.com/gondor/docker-volume-netshare&#34;&gt;netshare&lt;/a&gt; &lt;code&gt;Volume Driver&lt;/code&gt; with the following steps:&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;&lt;p&gt;ssh into the node (repeat for every node):&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;dm ssh node0
+&lt;/code&gt;&lt;/pre&gt;&lt;/li&gt;
+
+&lt;li&gt;&lt;p&gt;Download the netshare archive:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;curl -Lo docker-volume-netshare_0.11.tar.gz https://dl.bintray.com//content/pacesys/docker/docker-volume-netshare_0.11_linux_amd64.tar.gz?direct
+&lt;/code&gt;&lt;/pre&gt;&lt;/li&gt;
+
+&lt;li&gt;&lt;p&gt;Extract the archive to the persistant disk of Boot2Docker:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;sudo tar -xf docker-volume-netshare_0.11.tar.gz -C /var/lib/boot2docker/ --strip=1 docker-volume-netshare_0.11_linux_amd64/docker-volume-netshare \
+&amp;amp;&amp;amp; rm -f docker-volume-netshare_0.11.tar.gz
+&lt;/code&gt;&lt;/pre&gt;&lt;/li&gt;
+
+&lt;li&gt;&lt;p&gt;Create a .netrc file with credentials for the &lt;code&gt;demo&lt;/code&gt; share we created in the Windows Environment setup&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;sudo sh -c &#39;cat &amp;gt; /var/lib/boot2docker/.netrc &amp;lt;&amp;lt;EOF
+machine 192.168.233.1
+       username  demo
+       password  demo
+       domain    192.168.233.1
+EOF&#39;
+&lt;/code&gt;&lt;/pre&gt;&lt;/li&gt;
+
+&lt;li&gt;&lt;p&gt;Enable the netshare volume driver to start at boot:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;echo &#39;/var/lib/boot2docker/docker-volume-netshare cifs --netrc /var/lib/boot2docker &amp;gt;/var/lib/boot2docker/log/netshare 2&amp;gt;&amp;amp;1 &amp;lt;/dev/null &amp;amp;&#39; | sudo tee -a /var/lib/boot2docker/bootsync.sh  &amp;gt; /dev/null
+&lt;/code&gt;&lt;/pre&gt;&lt;/li&gt;
+
+&lt;li&gt;&lt;p&gt;Bounce the nodes&lt;/p&gt;&lt;/li&gt;
+
+&lt;li&gt;&lt;p&gt;Confirm the netshare Volume Driver is running&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;dm ssh node0 ps xawu | grep netshare
+&lt;/code&gt;&lt;/pre&gt;&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h2 id=&#34;demo-on-created-swarm-cluster:e3eed6f67421eff48e81c37460ec6ac3&#34;&gt;Demo on created swarm cluster&lt;/h2&gt;
+
+&lt;p&gt;To conclude this post, we will quickly demonstrate working cross node communication and container discovery as well as the ability to mount shared storage from the host.&lt;/p&gt;
+
+&lt;p&gt;First, ensure we are talking with the Swarm manager:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;dm env --swarm master0 | iex
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;List existing networks:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;docker network ls
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;&lt;strong&gt;Note&lt;/strong&gt;: A default bridge, host and null network exist for every node in the cluster.&lt;/p&gt;
+
+&lt;p&gt;Create a new network through swarm:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;docker network create --subnet=10.0.10.0/24 nw
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;&lt;strong&gt;Note&lt;/strong&gt;: It is good practice to provide the subnet when creating networks&lt;/p&gt;
+
+&lt;p&gt;Review the created network:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;docker network ls
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;&lt;strong&gt;Note&lt;/strong&gt;: The network was created as an overlay network across the cluster, this is the default when creating networks with swarm.&lt;/p&gt;
+
+&lt;p&gt;Instruct all nodes to pull the latest alpine image:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;docker pull alpine
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;If using ConEmu, press &lt;code&gt;CTRL+SHIFT+O&lt;/code&gt; to horizontally split the console&lt;/p&gt;
+
+&lt;p&gt;Ensure the newly created console is pointing to the swarm master&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;New-Alias dm docker-machine
+dm env --swarm master0 | iex
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Monitor the netshare logs on &lt;code&gt;node0&lt;/code&gt; in the top frame:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;dm ssh node0 tail -f /var/lib/boot2docker/log/netshare
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Define a volume for all nodes in the cluster:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;docker volume create -d cifs --name /192.168.233.1/demo
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Run a first container in the cluster:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;docker run -dit --name container1 --net nw -v 192.168.233.1/demo:/demo alpine sh
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;&lt;strong&gt;Note&lt;/strong&gt;: You should notice the volume being mounted on node0&lt;/p&gt;
+
+&lt;p&gt;Run a second container in the cluster:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;docker run -dit --name container2 --net nw -v 192.168.233.1/demo:/demo alpine sh
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Confirm Swarm is using the &lt;code&gt;spread&lt;/code&gt; scheduling strategy by default and ran each container on a separate node&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;docker ps
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Confirm container can ping container2 can ping container1 (even though they are running on different nodes)&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;docker exec -it container1 ping container2
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Confirm container1 can create files in the mounted volume:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;docker exec -it container1 touch /demo/fromcontainer1
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Confirm any files created by container1 are accessible to&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;docker exec -it container2 ls -l /demo/
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h2 id=&#34;tips-tricks:e3eed6f67421eff48e81c37460ec6ac3&#34;&gt;Tips &amp;amp; Tricks&lt;/h2&gt;
+
+&lt;p&gt;Get a list of every running VM:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;Get-VM | ? { $_.State -eq &amp;quot;Running&amp;quot; }
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Get a list of every Running VM with IpAddress:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;Get-VM | ? { $_.State -eq &amp;quot;Running&amp;quot; } | select Name, Uptime, @{l=&amp;quot;IpAddress&amp;quot;;e={$_.NetworkAdapters[0].IpAddresses[0]}}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Open console to a specific VM&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$vm = Get-VM consul0
+vmconnect $env:COMPUTERNAME $vm.Name -G $vm.Id
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;To print every cluster node with its ip (this could be piped to the &lt;code&gt;Add-Content&lt;/code&gt; cmdlet for the &lt;code&gt;/etc/hosts&lt;/code&gt;):&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;&amp;quot;master0&amp;quot;,&amp;quot;node0&amp;quot;,&amp;quot;node1&amp;quot; | % { &amp;quot;$($(Get-VM $_).NetworkAdapters[0].IpAddresses[0]) $_ &amp;quot; }
+&lt;/code&gt;&lt;/pre&gt;
+</description>
+    </item>
+    
+  </channel>
+</rss>

@@ -921,6 +921,8 @@ lxc-stop -n mycontainer
 lxc-destroy -n mycontainer
 </code></pre>
 
+<p>Interesting Read: <a href="https://www.hastexo.com/blogs/florian/2016/02/21/containers-just-because-everyone-else/">Linux Containers without Docker using OverlayFS &amp; Ansible</a>.</p>
+
 <h3 id="systemd-nspawn:cb6baf67dddd3a71c07abfd705dc7d4b">Systemd-nspawn</h3>
 
 <p>Originally created to debug the Systemd init system, future versions to be more integrated in the core of the OS (the most low-level and minimal approach to make containers native to the OS).</p>
@@ -1100,6 +1102,9 @@ runc start debian
 <p>Uses: <a href="https://github.com/samalba/dockerclient">samalba/dockerclient</a></p>
 
 <p>Code: <a href="https://github.com/ehazlett/interlock/blob/master/server/server.go#L174-L205">How this triggers extension reloads using a TTL Cache</a></p></li>
+
+<li><p>Monitoring with <code>docker stats</code> and the API behind it? <a href="https://github.com/google/cadvisor/tree/master/container">cAdvisor?</a>
+ more about monitoring: <a href="https://www.youtube.com/watch?v=sxE1vDtkYps&amp;feature=youtu.be">https://www.youtube.com/watch?v=sxE1vDtkYps&amp;feature=youtu.be</a></p></li>
 </ul>
 
 <h3 id="docker-registry:cb6baf67dddd3a71c07abfd705dc7d4b">Docker Registry</h3>
@@ -1159,6 +1164,23 @@ runc start debian
 <blockquote>
 <p>A high performance, open source, general RPC framework that puts mobile and HTTP/2 first.</p>
 </blockquote>
+
+<!-- 
+See also?: https://github.com/gengo/grpc-gateway & twitter conv: https://twitter.com/kelseyhightower/status/704914665969733633
+The etcd v3 API leverages gRPC for efficient watches and to reduce memory and CPU usage. 
+
+https://twitter.com/hashtag/grpc?src=hash
+https://www.eventbrite.com/e/grpc-community-meetup-tickets-22059237774
+https://coreos.com/blog/gRPC-protobufs-swagger.html
+
+Nice to see protobuf add initial support for Javascript — works in browsers and in node.js. https://github.com/google/protobuf/releases/tag/v3.0.0-beta-2 …
+
+It should also be noted that you can store full JSON/YAML/XML blobs in etcd and consul. Use a single key named app.conf and call it a day.
+
+Now that rkt has reached 1.0 we need to have a talk about container runtimes vs application management platforms.
+
+
+-->
 
 <p>Containerd is the plumbing component that will manage containers in a future version of Docker Engine.</p>
 

@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="en-us">
+
+<head>
+
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="">
+    <meta name="author" content="">
+
+    <title>Swarm week 2016 - Part 1: Cluster Setup -- Docker Saigon</title>
+
+    
+
+    
+    <link href="http://docker-saigon.github.io/css/bootstrap.min.css" rel="stylesheet">
+
+    
+    <link href="http://docker-saigon.github.io/css/clean-blog.min.css" rel="stylesheet">
+
+    
+    <link href="http://maxcdn.bootstrapcdn.com/font-awesome/4.1.0/css/font-awesome.min.css" rel="stylesheet" type="text/css">
+    <link href='http://fonts.googleapis.com/css?family=Lora:400,700,400italic,700italic' rel='stylesheet' type='text/css'>
+    <link href='http://fonts.googleapis.com/css?family=Open+Sans:300italic,400italic,600italic,700italic,800italic,400,300,600,700,800' rel='stylesheet' type='text/css'>
+
+    
+    
+    
+
+</head>
+
+<body>
+
+    
+    <nav class="navbar navbar-default navbar-custom navbar-fixed-top">
+        <div class="container-fluid">
+            
+            <div class="navbar-header page-scroll">
+                <button type="button" class="navbar-toggle" data-toggle="collapse" data-target="#bs-example-navbar-collapse-1">
+                    <span class="sr-only">Toggle navigation</span>
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                </button>
+                <a class="navbar-brand" href="http://docker-saigon.github.io/">Docker Saigon</a>
+            </div>
+
+                       
+            <div class="collapse navbar-collapse" id="bs-example-navbar-collapse-1">
+                <ul class="nav navbar-nav navbar-right">
+                    
+                    <li>
+                        <a href="http://docker-saigon.github.io/">home</a>
+                    </li>
+                    
+                    <li>
+                        <a href="http://docker-saigon.github.io/about/">about</a>
+                    </li>
+                    
+                    <li>
+                        <a href="http://docker-saigon.github.io/post/">Archive</a>
+                    </li>
+                    
+                    <li>
+                        <a href="http://docker-saigon.github.io/contact/">contact</a>
+                    </li>
+                    
+                  </ul>
+            </div>
+           
+
+        </div>
+        
+    </nav>
+
+
+    
+    
+    <header class="intro-header" style="background-image: url('http://docker-saigon.github.io//img/docker-swarm.jpg')">
+      
+      <div class="container">
+        <div class="row">
+           <div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+             <div class="post-heading">
+               <h1>Swarm Week 2016 - Part 1: Cluster Setup</h1>
+               <h2 class="subheading">Creating A Swarm 1.1 Cluster With Docker-Machine</h2>
+               <span class="meta">Posted by <a href="#">Docker Saigon</a> on Fri, Mar 11, 2016
+                 <br />
+                 In <a href="http://docker-saigon.github.io/categories/swarm" >Swarm</a>, <a href="http://docker-saigon.github.io/categories/docker-machine" >Docker-Machine</a>, 
+
+                 <br />
+                 Tags <a href="http://docker-saigon.github.io/tags/swarm" >swarm</a> <a href="http://docker-saigon.github.io/tags/swarm-week" >swarm-week</a> <a href="http://docker-saigon.github.io/tags/docker-machine" >docker-machine</a> <a href="http://docker-saigon.github.io/tags/windows" >windows</a> <a href="http://docker-saigon.github.io/tags/hyperv" >hyperv</a> <a href="http://docker-saigon.github.io/tags/powershell" >powershell</a> 
+
+               </span>
+             </div>
+           </div>
+        </div>
+      </div>
+    </header>
+
+    
+    <article>
+        <div class="container">
+            <div class="row">
+                <div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+                  
+
+<p>In this post we will be creating a local <code>Swarm</code> cluster running in VMs on <code>Boot2Docker</code>.</p>
+
+<p>We will be using <code>Consul</code> as a kvstore for:</p>
+
+<ul>
+<li>node discovery &amp; overlay networking,</li>
+<li>swarm leader election, and</li>
+<li>as a config store for other cluster components (i.e Interlock config).</li>
+</ul>
+
+<p>Swarm makes use of the <a href="https://github.com/docker/libkv">libkv</a> library to support multiple store backends (<code>etcd</code>,<code>zookeeper</code>,..).</p>
+
+<p>All Docker Engines will be created through <code>Docker-Machine</code> with TLS enabled. Additionally, we will see <strong>how to configure Boot2Docker with a static IP</strong> and install the <a href="https://github.com/gondor/docker-volume-netshare">netshare</a> <code>Volume Driver</code> to <strong>mount VM host folders across all cluster nodes for persistence</strong> - allowing any statefull containers to be re-scheduled on different nodes without loss of data.</p>
+
+<p>In a future post, we will look at deploying and scaling the <a href="https://github.com/docker/swarm-microservice-demo-v1">sample voting app</a> on top of this cluster with <code>Docker-Compose</code>, using the latest <code>Interlock</code> images with TLS authentication for communication with Swarm.</p>
+
+<p>In the sample set-up in this first part, we will be using a <strong>single-node</strong> Consul cluster and a <strong>single-node</strong> Swarm-manager cluster. For High Availability we would need to deploy several Consul nodes and Swarm-Manager replicas behind a load balancer, which may be explored in a future post.</p>
+
+<p>Finally, automation of all the manual steps using <a href="nathanleclaire.com/blog/2015/11/10/using-ansible-with-docker-machine-to-bootstrap-host-nodes/">Ansible containers</a> would be the perfect conclusion of this series.</p>
+
+<p>We will be using Windows 10, Hyper-V and PowerShell for this setup, but it should be possible to repeat a similar setup on OSX (replacing CIFS by NFS in the netshare, for example).</p>
+
+<h2 id="windows-10-environment-setup:e3eed6f67421eff48e81c37460ec6ac3">Windows 10 Environment Setup</h2>
+
+<p>The quickest way to get everything ready on Windows would be by installing <a href="https://github.com/git-for-windows">git-for-windows</a> and the <a href="https://www.docker.com/products/docker-toolbox">Docker Toolbox</a> (VirtualBox).</p>
+
+<p>However, <strong>if you are required use the Hyper-V role&hellip;</strong> - the Docker Toolbox can/should not be used.</p>
+
+<p>The following steps will guide you how to use <code>docker</code>, <code>docker-machine</code> and <code>docker-compose</code> with Hyper-V on Windows 10 (64 bit):</p>
+
+<ol>
+<li><p>Hyper-V &amp; NAT Setup</p>
+
+<p>Before <a href="http://www.thomasmaurer.ch/2015/11/hyper-v-virtual-switch-using-nat-configuration/">NAT support was added to Hyper-V (Q3 2015)</a> in Windows 10, it was recommended to <a href="http://thomasvochten.com/archive/2014/01/hyper-v-nat/">use VMWare&rsquo;s NAT &amp; DHCP services with Hyper-V</a>.</p>
+
+<p>It is also a possible to use Internet Connection Sharing (ICS) with you Virtual Network, but I strongly advise against it. ICS requires manual re-configuration when switching between Ethernet and WiFi adapters, which is not suitable.</p>
+
+<p>At the time of writing, I still prefer to use the VMWare networking services with Hyper-V as it provides the most features. You could even extract the <code>vmnetconfig.exe</code> UI tool from the VMWare Workstation installation source to easily manage your virtual networks (after only installing VMWare Player components):
+ <img src="http://docker-saigon.github.io/img/hyper-v-vmnetconf.png" alt="vmnetconf" /></p>
+
+<p>The VM networking services provided by the VMWare tools also include a DNS server which forwards any DNS requests from VMs to the host machine. This means that you only need to maintain the <code>etc/hosts</code> file centrally on the Hyper-V host for easy, IP-less, inter-VM communication.</p>
+
+<p>Before we move on, note down the name of your Virtual Switch configured with VMWare NAT, mine is <code>VMWare Nat</code>.</p>
+
+<p>If you decide to use the new NAT switches supported by Hyper-V on Windows 10, you will still need to find a solution for <a href="https://4sysops.com/archives/native-nat-in-windows-10-hyper-v-using-a-nat-virtual-switch/#dhcp-server-for-windows">DHCP</a> as well as <a href="http://unbound.net/index.html">DNS</a>.</p></li>
+
+<li><p>Git, ssh, scp, openssl, &hellip;</p>
+
+<p>Installing <a href="https://github.com/git-for-windows">git-for-windows</a> is mandatory for a decent console experience on Windows. The git-for-windows bundle also removes the need for putty, plink &amp; pageant when working with remote Linux machines.</p>
+
+<p>Even though the Windows 10 console has greatly improved (transparency, multi-line selections, full-screen mode, <code>CTRL+C/V</code> support, &hellip;), I still recommend the usage of <a href="https://conemu.github.io/">ConEmu</a> as it has more features (quickly splitting console panels, switching between consoles, configurable short-cuts, &hellip;).</p></li>
+
+<li><p>Docker setup</p>
+
+<p>In a bash console, execute the following commands:</p>
+
+<p>Download the <code>docker</code> Windows 64 bit binary:</p>
+
+<pre><code> curl -Lo /usr/bin/docker.exe https://get.docker.com/builds/Windows/x86_64/docker-1.10.3.exe
+</code></pre>
+
+<p>Download <code>docker-machine</code> Windows 64 bit binary (includes hyperv driver)</p>
+
+<pre><code> curl -Lo /usr/bin/docker-machine.exe https://github.com/docker/machine/releases/download/v0.6.0/docker-machine-Windows-x86_64.exe
+</code></pre>
+
+<p>Download <code>docker-compose</code> Windows 64 bit binary</p>
+
+<pre><code> curl -Lo /usr/bin/docker-compose.exe https://github.com/docker/compose/releases/download/1.6.2/docker-compose-Windows-x86_64.exe
+</code></pre></li>
+
+<li><p>PowerShell set-up</p>
+
+<p>To control Hyper-V, PowerShell needs to have Administrative privileges. in ConEmu pressing <code>WINDOWS+SHIFT+W</code> allows you to quickly create such a session:</p>
+
+<p><img src="http://docker-saigon.github.io/img/powershell-admin.png" alt="PowerShell Admin" /></p>
+
+<p>Make sure your <code>$PATH</code> environment variable includes the <code>/usr/bin/</code> directory where we downloaded all the binaries earlier:</p>
+
+<pre><code> $env:Path.Contains(&quot;$env:LOCALAPPDATA\Programs\Git\usr\bin&quot;)
+</code></pre>
+
+<p>Should return <code>True</code>.</p>
+
+<p>Confirm the Docker tools are working:</p>
+
+<pre><code> docker --version; docker-machine --version; docker-compose --version
+</code></pre>
+
+<p>Should return something similar to the following:</p>
+
+<pre><code> Docker version 1.10.3, build 20f81dd
+ docker-machine.exe version 0.6.0, build e27fb87
+ docker-compose version 1.6.2, build e80fc83
+</code></pre>
+
+<p>During this guide, we will use aliases as follows:</p>
+
+<pre><code> New-Alias &quot;dm&quot; &quot;docker-machine&quot;
+</code></pre></li>
+
+<li><p>Shared Folder Set-up</p>
+
+<p>For this demo we assume a <code>demo</code> user with password <code>demo</code> is created on the Hyper-V host and a folder share accessible to this user exists under the name <code>demo</code>.</p></li>
+</ol>
+
+<h2 id="set-up-the-key-value-store:e3eed6f67421eff48e81c37460ec6ac3">Set up the Key Value Store</h2>
+
+<p>We will run Consul using a Docker machine. After provisioning the machine, we will configure a static IP, launch the Consul container and confirm Consul is working.</p>
+
+<ol>
+<li><p>Provision the <code>consul0</code> machine</p>
+
+<p>Generic command:</p>
+
+<pre><code>docker-machine create consul0
+</code></pre>
+
+<p>In PowerShell using Hyper-V and setting custom memory:</p>
+
+<pre><code>dm create `
+ --driver hyperv `
+ --hyperv-virtual-switch &quot;VMWare NAT&quot; `
+ --hyperv-memory &quot;512&quot; consul0
+</code></pre></li>
+
+<li><p>Set a Static IP (<a href="https://github.com/docker/machine/issues/1709">ref</a>) and reboot the machine.</p>
+
+<p>In this sample setup, VMs use the <code>192.168.233.0/24</code> subnet with the NAT gateway on <code>192.168.233.2</code> and a DHCP range of <code>128-254</code>. We will assign <code>192.168.233.5</code> as the static IP for our Consul node. Keep in mind you may need to update these values to match your configuration.</p>
+
+<p>By default, DHCP is enabled on the Boot2Docker interfaces, but we may disable it by killing the process managing a particular interface:</p>
+
+<pre><code>kill `more /var/run/udhcpc.eth0.pid`
+</code></pre>
+
+<p>Do not run the following commands on the Boot2Docker VM just yet, we will add them to the boot process at a later stage.</p>
+
+<p>To set a static IP and ensure a default route to the gateway, we would use the following 2 commands:</p>
+
+<pre><code>ifconfig eth0 192.168.233.10 netmask 255.255.255.0 broadcast 192.168.233.255 up
+route add default gw 192.168.233.2
+</code></pre>
+
+<p>If we weren&rsquo;t using PowerShell, We may add the above commands to the boot script as follows (quote the heredoc label to avoid backticks from being evaluated):</p>
+
+<pre><code>cat &lt;&lt;&quot;EOF&quot; | sudo tee /var/lib/boot2docker/bootsync.sh
+kill `more /var/run/udhcpc.eth0.pid`
+ifconfig eth0 192.168.233.10 netmask 255.255.255.0 broadcast 192.168.233.255 up
+route add default gw 192.168.233.2
+EOF
+</code></pre>
+
+<p>Or, using PowerShell with a single command from the Host:</p>
+
+<pre><code>echo &quot;kill ``more /var/run/udhcpc.eth0.pid```n`
+ifconfig eth0 192.168.233.10 netmask 255.255.255.0 broadcast 192.168.233.255 up`n`
+route add default gw 192.168.233.2&quot; | `
+dm ssh consul0 &quot;sudo tee /var/lib/boot2docker/bootsync.sh&quot; &gt; $null
+</code></pre>
+
+<p>Bounce the box</p>
+
+<pre><code>dm restart consul0
+</code></pre></li>
+
+<li><p>Regenerate the certificates</p>
+
+<p>Docker-Machine generated certificates are only valid for the old IP, changing the IP requires us to regenerate the certificates:</p>
+
+<pre><code>dm regenerate-certs consul0
+</code></pre></li>
+
+<li><p>Start Consul</p>
+
+<p>Docker-Machine helps you manage your environment configuration to target the right Boot2Docker VM:</p>
+
+<pre><code>docker-machine env consul0
+</code></pre>
+
+<p>Activating this environment in PowerShell (using <code>iex</code> as an alias for <code>Invoke-Expression</code>), looks as follows:</p>
+
+<pre><code>dm env consul0 | iex
+</code></pre>
+
+<p>Confirm all is working:</p>
+
+<pre><code>docker info
+</code></pre>
+
+<p>Launch a single node Consul container, exposing its DNS and the Consul API:</p>
+
+<pre><code>docker run -d -p 192.168.233.10:8500:8500 -p 192.168.233.10:53:8600/udp --name consul -h consul --restart always gliderlabs/consul-server -bootstrap
+</code></pre>
+
+<p>Follow the boot process of your Consul node:</p>
+
+<pre><code>docker logs -f consul
+</code></pre>
+
+<p>Press <code>CTRL+C</code> and add an entry for the static consul IP to your hosts file (if your virtual network forwards DNS queries to your host, this will allow all your nodes to point to the <code>consul0</code> node by its hostname).</p>
+
+<pre><code>&quot;consul0&quot; | `
+% { &quot;$($(Get-VM $_).NetworkAdapters[0].IpAddresses[0]) $_&quot; } | `
+ac $env:Windir\System32\Drivers\etc\hosts
+</code></pre>
+
+<p>Confirm Consul works:</p>
+
+<pre><code>iwr http://consul0:8500/v1/catalog/nodes | ConvertFrom-Json
+</code></pre></li>
+</ol>
+
+<h2 id="set-up-the-swarm-manager:e3eed6f67421eff48e81c37460ec6ac3">Set up the Swarm Manager</h2>
+
+<p>We will now create a single Swarm Manager (no replication) and use the following <code>Docker-Machine</code> <a href="https://docs.docker.com/machine/reference/create/">flags</a> to configure our box:</p>
+
+<p>Swarm flags:</p>
+
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td><code>--swarm</code></td>
+<td>Provision swarm agent, <a href="https://docs.docker.com/swarm/reference/join/">see docs</a></td>
+</tr>
+
+<tr>
+<td><code>--swarm-master</code></td>
+<td>Provision swarm manager, <a href="https://docs.docker.com/swarm/reference/manage/">see docs</a></td>
+</tr>
+
+<tr>
+<td><code>--swarm-discovery</code> &nbsp;</td>
+<td>Discovery method, <a href="https://docs.docker.com/swarm/reference/manage/#discovery-discovery-backend">see docs</a></td>
+</tr>
+</tbody>
+</table>
+
+<p>We also specify Engine <a href="https://docs.docker.com/engine/reference/commandline/daemon">configuration options</a> to enable <strong>Node Discovery</strong> in the created Docker engine, this is required to support overlay networking:</p>
+
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Description</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td><code>--cluster-store</code></td>
+<td>kvstore URL</td>
+</tr>
+
+<tr>
+<td><code>--cluster-advertise</code></td>
+<td>URL for cluster nodes to reach this node, <a href="https://docs.docker.com/engine/reference/commandline/daemon/#nodes-discovery">see docs</a></td>
+</tr>
+
+<tr>
+<td><code>--cluster-store-opt</code> &nbsp;</td>
+<td>additional cluster options</td>
+</tr>
+</tbody>
+</table>
+
+<p>Below is an overview of default sockets used by Docker components:</p>
+
+<table>
+<thead>
+<tr>
+<th>Port</th>
+<th>Protocol</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td>2375 &nbsp;</td>
+<td>insecure docker API</td>
+</tr>
+
+<tr>
+<td>2376</td>
+<td>TLS secure docker API</td>
+</tr>
+
+<tr>
+<td>3375</td>
+<td>insecure swarm API</td>
+</tr>
+
+<tr>
+<td>3376</td>
+<td>TLS secure swarm API</td>
+</tr>
+</tbody>
+</table>
+
+<p>Combining the above information, this how we may create our Swarm Manager with Docker-Machine using Powershell:</p>
+
+<pre><code>dm create `
+ --driver hyperv `
+ --hyperv-virtual-switch &quot;VMWare NAT&quot; `
+ --swarm --swarm-master `
+ --swarm-discovery &quot;consul://consul0:8500/cluster1&quot; `
+ --engine-opt &quot;cluster-store consul://consul0:8500&quot; `
+ --engine-opt &quot;cluster-advertise eth0:2376&quot; `
+ --engine-opt &quot;cluster-store-opt kv.path=cluster1/docker/overlay&quot; master0
+</code></pre>
+
+<p>Once our box has been provisioned, we can confirm the engine options were applied by looking at the <code>/var/lib/boot2docker/profile</code>:</p>
+
+<pre><code>dm ssh master0 cat /var/lib/boot2docker/profile
+</code></pre>
+
+<p>You may have noticed that we specified custom paths for the config store, we can confirm the actual keys stored in consul with the following command:</p>
+
+<pre><code>iwr http://consul0:8500/v1/kv/?recurse | ConvertFrom-Json | ft Key
+</code></pre>
+
+<h2 id="join-nodes-to-the-swarm-cluster:e3eed6f67421eff48e81c37460ec6ac3">Join Nodes to the Swarm cluster</h2>
+
+<p>To create the Swarm Nodes, we follow the exact same steps as before, however we do not specify the <code>--swarm-master</code> flag.</p>
+
+<p>Additionally, we may attach <a href="https://docs.docker.com/userguide/labels-custom-metadata/#daemon-labels">labels</a> to our nodes depending on the roles we assign to them within our infrastructure:</p>
+
+<pre><code>dm create `
+ --driver hyperv `
+ --hyperv-virtual-switch &quot;VMWare NAT&quot;`
+ --swarm `
+ --swarm-discovery=&quot;consul://consul0:8500/cluster1&quot; `
+ --engine-opt=&quot;cluster-store=consul://consul0:8500&quot; `
+ --engine-opt=&quot;cluster-advertise=eth0:2376&quot; `
+ --engine-opt=&quot;cluster-store-opt=kv.path=cluster1/docker/overlay&quot; `
+ --engine-label=&quot;com.docker-saigon.group=frontend&quot; `
+ --engine-label &quot;com.docker-saigon.environment=dev&quot; node0
+</code></pre>
+
+<p>Don&rsquo;t forget to change the <code>--engine-label</code> flags when provisioning multiple nodes with different roles</p>
+
+<p>Confirm the nodes have joined the Swarm</p>
+
+<p>Look at the consul data:</p>
+
+<pre><code>iwr http://consul0:8500/v1/kv/?recurse | ConvertFrom-Json | ft Key
+</code></pre>
+
+<p>Activate the connection to the Swarm cluster:</p>
+
+<pre><code>dm env --swarm master0 | iex
+</code></pre>
+
+<p><strong>Note:</strong> The usage of the <code>--swarm</code> flag!</p>
+
+<p>Once the nodes become available, install the <a href="https://github.com/gondor/docker-volume-netshare">netshare</a> <code>Volume Driver</code> with the following steps:</p>
+
+<ol>
+<li><p>ssh into the node (repeat for every node):</p>
+
+<pre><code>dm ssh node0
+</code></pre></li>
+
+<li><p>Download the netshare archive:</p>
+
+<pre><code>curl -Lo docker-volume-netshare_0.11.tar.gz https://dl.bintray.com//content/pacesys/docker/docker-volume-netshare_0.11_linux_amd64.tar.gz?direct
+</code></pre></li>
+
+<li><p>Extract the archive to the persistant disk of Boot2Docker:</p>
+
+<pre><code>sudo tar -xf docker-volume-netshare_0.11.tar.gz -C /var/lib/boot2docker/ --strip=1 docker-volume-netshare_0.11_linux_amd64/docker-volume-netshare \
+&amp;&amp; rm -f docker-volume-netshare_0.11.tar.gz
+</code></pre></li>
+
+<li><p>Create a .netrc file with credentials for the <code>demo</code> share we created in the Windows Environment setup</p>
+
+<pre><code>sudo sh -c 'cat &gt; /var/lib/boot2docker/.netrc &lt;&lt;EOF
+machine 192.168.233.1
+       username  demo
+       password  demo
+       domain    192.168.233.1
+EOF'
+</code></pre></li>
+
+<li><p>Enable the netshare volume driver to start at boot:</p>
+
+<pre><code>echo '/var/lib/boot2docker/docker-volume-netshare cifs --netrc /var/lib/boot2docker &gt;/var/lib/boot2docker/log/netshare 2&gt;&amp;1 &lt;/dev/null &amp;' | sudo tee -a /var/lib/boot2docker/bootsync.sh  &gt; /dev/null
+</code></pre></li>
+
+<li><p>Bounce the nodes</p></li>
+
+<li><p>Confirm the netshare Volume Driver is running</p>
+
+<pre><code>dm ssh node0 ps xawu | grep netshare
+</code></pre></li>
+</ol>
+
+<h2 id="demo-on-created-swarm-cluster:e3eed6f67421eff48e81c37460ec6ac3">Demo on created swarm cluster</h2>
+
+<p>To conclude this post, we will quickly demonstrate working cross node communication and container discovery as well as the ability to mount shared storage from the host.</p>
+
+<p>First, ensure we are talking with the Swarm manager:</p>
+
+<pre><code>dm env --swarm master0 | iex
+</code></pre>
+
+<p>List existing networks:</p>
+
+<pre><code>docker network ls
+</code></pre>
+
+<p><strong>Note</strong>: A default bridge, host and null network exist for every node in the cluster.</p>
+
+<p>Create a new network through swarm:</p>
+
+<pre><code>docker network create --subnet=10.0.10.0/24 nw
+</code></pre>
+
+<p><strong>Note</strong>: It is good practice to provide the subnet when creating networks</p>
+
+<p>Review the created network:</p>
+
+<pre><code>docker network ls
+</code></pre>
+
+<p><strong>Note</strong>: The network was created as an overlay network across the cluster, this is the default when creating networks with swarm.</p>
+
+<p>Instruct all nodes to pull the latest alpine image:</p>
+
+<pre><code>docker pull alpine
+</code></pre>
+
+<p>If using ConEmu, press <code>CTRL+SHIFT+O</code> to horizontally split the console</p>
+
+<p>Ensure the newly created console is pointing to the swarm master</p>
+
+<pre><code>New-Alias dm docker-machine
+dm env --swarm master0 | iex
+</code></pre>
+
+<p>Monitor the netshare logs on <code>node0</code> in the top frame:</p>
+
+<pre><code>dm ssh node0 tail -f /var/lib/boot2docker/log/netshare
+</code></pre>
+
+<p>Define a volume for all nodes in the cluster:</p>
+
+<pre><code>docker volume create -d cifs --name /192.168.233.1/demo
+</code></pre>
+
+<p>Run a first container in the cluster:</p>
+
+<pre><code>docker run -dit --name container1 --net nw -v 192.168.233.1/demo:/demo alpine sh
+</code></pre>
+
+<p><strong>Note</strong>: You should notice the volume being mounted on node0</p>
+
+<p>Run a second container in the cluster:</p>
+
+<pre><code>docker run -dit --name container2 --net nw -v 192.168.233.1/demo:/demo alpine sh
+</code></pre>
+
+<p>Confirm Swarm is using the <code>spread</code> scheduling strategy by default and ran each container on a separate node</p>
+
+<pre><code>docker ps
+</code></pre>
+
+<p>Confirm container can ping container2 can ping container1 (even though they are running on different nodes)</p>
+
+<pre><code>docker exec -it container1 ping container2
+</code></pre>
+
+<p>Confirm container1 can create files in the mounted volume:</p>
+
+<pre><code>docker exec -it container1 touch /demo/fromcontainer1
+</code></pre>
+
+<p>Confirm any files created by container1 are accessible to</p>
+
+<pre><code>docker exec -it container2 ls -l /demo/
+</code></pre>
+
+<h2 id="tips-tricks:e3eed6f67421eff48e81c37460ec6ac3">Tips &amp; Tricks</h2>
+
+<p>Get a list of every running VM:</p>
+
+<pre><code>Get-VM | ? { $_.State -eq &quot;Running&quot; }
+</code></pre>
+
+<p>Get a list of every Running VM with IpAddress:</p>
+
+<pre><code>Get-VM | ? { $_.State -eq &quot;Running&quot; } | select Name, Uptime, @{l=&quot;IpAddress&quot;;e={$_.NetworkAdapters[0].IpAddresses[0]}}
+</code></pre>
+
+<p>Open console to a specific VM</p>
+
+<pre><code>$vm = Get-VM consul0
+vmconnect $env:COMPUTERNAME $vm.Name -G $vm.Id
+</code></pre>
+
+<p>To print every cluster node with its ip (this could be piped to the <code>Add-Content</code> cmdlet for the <code>/etc/hosts</code>):</p>
+
+<pre><code>&quot;master0&quot;,&quot;node0&quot;,&quot;node1&quot; | % { &quot;$($(Get-VM $_).NetworkAdapters[0].IpAddresses[0]) $_ &quot; }
+</code></pre>
+
+                </div>
+            </div>
+        </div>
+    </article>
+
+    <hr>
+    
+    <footer>
+        <div class="container">
+            <div class="row">
+                <div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+                  <ul class="list-inline text-center">
+                    <li>
+                      <a href="mailto:docker-saigon@gmail.com">
+                        <span class="fa-stack fa-lg">
+                          <i class="fa fa-circle fa-stack-2x"></i>
+                          <i class="fa fa-envelope-o fa-stack-1x fa-inverse"></i>
+                        </span>
+                      </a>
+                    </li>
+                    
+                    <li>
+                      <a href="https://twitter.com/docker_saigon">
+                        <span class="fa-stack fa-lg">
+                          <i class="fa fa-circle fa-stack-2x"></i>
+                          <i class="fa fa-twitter fa-stack-1x fa-inverse"></i>
+                        </span>
+                      </a>
+                    </li>
+                    
+                    <li>
+                      <a href="https://www.youtube.com/channel/UC1t_GbTJudAAK9Wqkg6-uLw">
+                        <span class="fa-stack fa-lg">
+                          <i class="fa fa-circle fa-stack-2x"></i>
+                          <i class="fa fa-youtube fa-stack-1x fa-inverse"></i>
+                        </span>
+                      </a>
+                    </li>
+                    
+                    <li>
+                      <a href="https://github.com/docker-saigon">
+                        <span class="fa-stack fa-lg">
+                          <i class="fa fa-circle fa-stack-2x"></i>
+                          <i class="fa fa-github fa-stack-1x fa-inverse"></i>
+                        </span>
+                      </a>
+                    </li>
+                    
+                    <li>
+                      <a href="https://www.facebook.com/DockerSaigon">
+                        <span class="fa-stack fa-lg">
+                          <i class="fa fa-circle fa-stack-2x"></i>
+                          <i class="fa fa-facebook fa-stack-1x fa-inverse"></i>
+                        </span>
+                      </a>
+                    </li>
+                    
+                  </ul>
+                  <p class="copyright text-muted">Code released under the Apache 2.0 license.</p>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    
+    <script src="http://docker-saigon.github.io/js/jquery.min.js"></script>
+
+    
+    <script src="http://docker-saigon.github.io/js/bootstrap.min.js"></script>
+
+    
+    <script src="http://docker-saigon.github.io/js/clean-blog.js"></script>
+
+    
+<script>
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+    (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+    m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+  ga('create', 'UA-69412248-1', 'auto');
+  ga('send', 'pageview');
+</script>
+
+
+</body>
+
+</html>
+
