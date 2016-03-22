@@ -1,0 +1,218 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Registry on Docker Saigon</title>
+    <link>http://docker-saigon.github.io/categories/registry/</link>
+    <description>Recent content in Registry on Docker Saigon</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en-us</language>
+    <copyright>Code released under the Apache 2.0 license.</copyright>
+    <lastBuildDate>Tue, 22 Mar 2016 14:52:43 +0700</lastBuildDate>
+    <atom:link href="http://docker-saigon.github.io/categories/registry/index.xml" rel="self" type="application/rss+xml" />
+    
+    <item>
+      <title>TLS secured Private Registries</title>
+      <link>http://docker-saigon.github.io/post/Private-Registry-Setup/</link>
+      <pubDate>Tue, 22 Mar 2016 14:52:43 +0700</pubDate>
+      
+      <guid>http://docker-saigon.github.io/post/Private-Registry-Setup/</guid>
+      <description>
+
+&lt;p&gt;An intermezzo after creating a small swarm cluster in &lt;a href=&#34;http://docker-saigon.github.io/post/Swarm-Week-2016-Part1/&#34;&gt;our previous post&lt;/a&gt; and before deploying &amp;amp; scaling the sample voting app on this cluster.&lt;/p&gt;
+
+&lt;p&gt;In this post we will use &lt;code&gt;Docker-Machine&lt;/code&gt; to provision a &lt;code&gt;Boot2Docker&lt;/code&gt; host for a  local Docker &lt;code&gt;Registry&lt;/code&gt; and explain how to configure other Machines (i.e. &lt;code&gt;Boot2Docker&lt;/code&gt; &amp;amp; &lt;code&gt;CoreOS&lt;/code&gt; machines) to push and pull from this Registry using TLS.&lt;/p&gt;
+
+&lt;p&gt;This setup is great for giving demonstrations where internet access is not guaranteed. We will not be configuring basic authentication or more advanced features such as web hooks, but provide links for how to do this.&lt;/p&gt;
+
+&lt;p&gt;We will, again, be using Windows 10, Hyper-V and PowerShell for this setup (as there aren&amp;rsquo;t many guides out there using this setup), but it should be trivial to repeat these steps on OSX.&lt;/p&gt;
+
+&lt;h2 id=&#34;1-create-configure-the-machine-to-host-the-registry:21a6fde08c8e60098cde90e87b1d737a&#34;&gt;1. Create &amp;amp; Configure the Machine to host the Registry&lt;/h2&gt;
+
+&lt;p&gt;Use Docker-Machine to create a TLS secured Docker Engine. For the full details on our environment configuration, refer to our previous post on &lt;a href=&#34;http://docker-saigon.github.io/post/Swarm-Week-2016-Part1/&#34;&gt;How to create a Swarm cluster.&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;As seen in that post, using Hyper-V and an elevated Powershell session with the &lt;code&gt;dm&lt;/code&gt; alias (&lt;code&gt;New-Alias dm Docker-Machine&lt;/code&gt;), we may run the following command to create our &lt;code&gt;registry0&lt;/code&gt; machine:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;dm create `
+ --driver hyperv `
+ --hyperv-virtual-switch &amp;quot;VMWare NAT&amp;quot; `
+ --hyperv-memory &amp;quot;512&amp;quot; registry0
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;&lt;strong&gt;Note&lt;/strong&gt;: As a result of the above command, &lt;code&gt;Docker-Machine&lt;/code&gt; will have created a PKI for us. The Certificate Authority private key as well as self-signed CA certificate are stored under &lt;code&gt;~/.docker/machine/certs/&lt;/code&gt;, we will use this information when generating the TLS assets for our registry.&lt;/p&gt;
+
+&lt;p&gt;Configure a static IP (192.168.233.3) for the newly created machine.&lt;/p&gt;
+
+&lt;p&gt;Using PowerShell with a single command from the Host:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;echo &amp;quot;kill ``more /var/run/udhcpc.eth0.pid```n`
+ifconfig eth0 192.168.233.3 netmask 255.255.255.0 broadcast 192.168.233.255 up`n`
+route add default gw 192.168.233.2&amp;quot; | `
+dm ssh registry0 &amp;quot;sudo tee /var/lib/boot2docker/bootsync.sh&amp;quot; &amp;gt; $null
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;(see Swarm post referred to earlier for a detailed explanation of these commands)&lt;/p&gt;
+
+&lt;p&gt;Now, bounce the machine:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;dm restart registry0
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;After changing the IP, we have to re-generate the certificates used by our &lt;code&gt;registry0&lt;/code&gt; machine:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;dm regenerate-certs registry0
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Add DNS entries for &lt;code&gt;registry0&lt;/code&gt; (in our setup, this is handled through the &lt;code&gt;/etc/hosts&lt;/code&gt; file on the VM Host):&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;&amp;quot;192.168.233.3 registry0`n192.168.233.3 registry0.localdomain&amp;quot; | ac $env:Windir\System32\Drivers\etc\hosts
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;&lt;strong&gt;Note&lt;/strong&gt;: Requires an elevated PowerShell session.&lt;/p&gt;
+
+&lt;h2 id=&#34;2-prepare-the-tls-assets-for-the-registry:21a6fde08c8e60098cde90e87b1d737a&#34;&gt;2. Prepare the TLS assets for the Registry&lt;/h2&gt;
+
+&lt;p&gt;For convenience, we will use the PKI created by &lt;code&gt;Docker-Machine&lt;/code&gt; to generate a signed certificate.&lt;/p&gt;
+
+&lt;p&gt;First, generate the private key to be used by the registry server:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;openssl genrsa -out registry-key.pem 2048
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Next, we need to create a signing request. We will use a config file &lt;code&gt;registry-openssl.cnf&lt;/code&gt; with the following contents:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;[req]
+req_extensions = v3_req
+distinguished_name = req_distinguished_name
+[req_distinguished_name]
+[ v3_req ]
+basicConstraints = CA:FALSE
+keyUsage = nonRepudiation, digitalSignature, keyEncipherment
+subjectAltName = @alt_names
+[alt_names]
+DNS.1 = registry0.localdomain
+DNS.2 = registry0
+IP.1 = 192.168.233.3
+IP.2 = 192.168.150.104
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;&lt;strong&gt;Note&lt;/strong&gt;: Make sure to replace/add any hostnames and IPs the registry will be reachable on by other Docker Engines into the above snippet.&lt;/p&gt;
+
+&lt;p&gt;Use the private key and the configuration file to create a certificate signing request (using git-bash):&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;openssl req -new -key registry-key.pem -out registry.csr -subj &amp;quot;/CN=registry0.localdomain&amp;quot; -config registry-openssl.cnf
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Use the CA created by &lt;code&gt;Docker-Machine&lt;/code&gt; to sign the certificate for the registry:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;cp ~/.docker/machine/certs/ca*-pem .
+openssl x509 -req -in registry.csr -CA &amp;quot;ca.pem&amp;quot; -CAkey &amp;quot;ca-key.pem&amp;quot; -CAcreateserial -out &amp;quot;registry.pem&amp;quot; -days 365 -extensions v3_req -extfile registry-openssl.cnf
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Copy the registry private key, signed certificate as well as certificate authority to the registry server:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;scp -i ~/.docker/machine/machines/registry0/id_rsa registry.pem registry-key.pem ca.pem docker@registry0:.
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h2 id=&#34;3-create-the-registry-container:21a6fde08c8e60098cde90e87b1d737a&#34;&gt;3. Create the Registry Container&lt;/h2&gt;
+
+&lt;p&gt;We now have all ingredients to run a basic registry server on the &lt;code&gt;registry0&lt;/code&gt; Machine. We will use a minimal Registry configuration, refer to the &lt;a href=&#34;https://docs.docker.com/registry/configuration/&#34;&gt;official Docker docs&lt;/a&gt; for more configuration options.&lt;/p&gt;
+
+&lt;p&gt;SSH to our Machine with &lt;code&gt;dm ssh registry0&lt;/code&gt; or alternatively with the following command:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;ssh -i ~/.docker/machine/machines/registry0/id_rsa docker@registry0
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Prepare the folder structure and data for the registry server&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;sudo -i
+mkdir /var/lib/boot2docker/registry-certs/
+mkdir /var/lib/boot2docker/registry-data/
+mv ~docker/registry-*.pem /var/lib/boot2docker/registry-certs/
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Start the Registry container (this will pull the image automatically from the Docker Hub):&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;docker run -d -p 443:5000 --restart=always --name registry \
+  -v /var/lib/boot2docker/registry-certs:/certs \
+  -e REGISTRY_HTTP_TLS_CERTIFICATE=/certs/registry.pem \
+  -e REGISTRY_HTTP_TLS_KEY=/certs/registry-key.pem \
+  -v /var/lib/boot2docker/registry-data:/var/lib/registry \
+  registry:2
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;&lt;strong&gt;Note&lt;/strong&gt;: may need to chain the &lt;code&gt;registry.pem&lt;/code&gt; certificate with the &lt;code&gt;ca.pem&lt;/code&gt; certificate for this to work (to be confirmed)&lt;/p&gt;
+
+&lt;p&gt;From any other machine, confirm the registry works with the following command (assuming &lt;code&gt;ca.pem&lt;/code&gt; lives in &lt;code&gt;PWD&lt;/code&gt;)&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;curl --cacert ca.pem https://registry0/v2/
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;&lt;strong&gt;Note&lt;/strong&gt;: To give an example of the more advanced configuration options, refer to &lt;a href=&#34;https://docs.docker.com/registry/configuration/#notifications&#34;&gt;the configuration of webhooks&lt;/a&gt;:&lt;/p&gt;
+
+&lt;p&gt;&lt;code&gt;REGISTRY_NOTIFICATIONS_ENDPOINTS_{name,url,headers, ...}&lt;/code&gt; ENV variables which allow us to call out systems such as &lt;a href=&#34;https://github.com/ehazlett/conduit&#34;&gt;Conduit&lt;/a&gt; and automatically deploy images a build server may push to this registry.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&#34;http://docker-saigon.github.io/img/notifications.png&#34; alt=&#34;registry notifications&#34; /&gt;&lt;/p&gt;
+
+&lt;p&gt;A more complicated setup may be managed through &lt;code&gt;Docker-Compose&lt;/code&gt;.&lt;/p&gt;
+
+&lt;h2 id=&#34;4-ensuring-your-docker-engine-can-push-pull-from-this-registry:21a6fde08c8e60098cde90e87b1d737a&#34;&gt;4. Ensuring your Docker Engine can push/pull from this registry.&lt;/h2&gt;
+
+&lt;p&gt;Servers who do not trust the CA which signed the Registry certificate will not be able to push/pull from our Registry. The steps below show how to make a server trust our CA.&lt;/p&gt;
+
+&lt;h3 id=&#34;for-boot2docker-machines:21a6fde08c8e60098cde90e87b1d737a&#34;&gt;For Boot2Docker machines:&lt;/h3&gt;
+
+&lt;p&gt;Add the Certificate Authority to a &lt;code&gt;Boot2Docker&lt;/code&gt; machine (See: &lt;a href=&#34;https://github.com/boot2docker/boot2docker/blob/v1.10.3/README.md#installing-secure-registry-certificates&#34;&gt;B2d - Installing Secure Registry Certificates&lt;/a&gt;):&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;dm scp ca.pem &amp;lt;machine&amp;gt;:~
+dm ssh &amp;lt;machine&amp;gt; sudo mkdir -p /var/lib/boot2docker/certs/
+dm ssh &amp;lt;machine&amp;gt; sudo mv ~/ca.pem /var/lib/boot2docker/certs/
+dm restart &amp;lt;machine&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Once you the machine has rebooted, it will be able to push/pull from the registry.&lt;/p&gt;
+
+&lt;h3 id=&#34;for-coreos-machines:21a6fde08c8e60098cde90e87b1d737a&#34;&gt;For CoreOS machines:&lt;/h3&gt;
+
+&lt;p&gt;Similar to Boot2Docker, add the Certificate Authority and update the certificates:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;scp ca.pem core@&amp;lt;machine&amp;gt;:~
+ssh core@&amp;lt;machine&amp;gt; sudo mv ca.pem /etc/ssl/certs
+ssh core@&amp;lt;machine&amp;gt; sudo update-ca-certificates
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h3 id=&#34;for-ubuntu-debian-rhel-centos:21a6fde08c8e60098cde90e87b1d737a&#34;&gt;For Ubuntu, Debian, RHEL, CentOS, &amp;hellip;&lt;/h3&gt;
+
+&lt;p&gt;Refer to the &lt;a href=&#34;https://docs.docker.com/docker-trusted-registry/configure/config-security/#install-registry-certificates-on-client-docker-daemons&#34;&gt;official documentation&lt;/a&gt; from the DTR (the setup is the same for our TLS secured private registry).&lt;/p&gt;
+
+&lt;h2 id=&#34;5-usage-tips-for-your-private-registry:21a6fde08c8e60098cde90e87b1d737a&#34;&gt;5. Usage tips for your private Registry&lt;/h2&gt;
+
+&lt;p&gt;To pull a Docker Image from the Hub and make it available on your local registry, enter the following commands (example with the official alpine-based nginx image):&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;docker pull nginx:mainline-alpine
+docker tag nginx:mainline-alpine registry0.localdomain/nginx:mainline-alpine
+docker push registry0.localdomain/nginx:mainline-alpine
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;From then on, all local machines may easily serve static content with the following command:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;docker run -d --name web -v --restart=always /path/to/html:/etc/nginx/html:ro registry0.localdomain/nginx:mainline-alpine
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;&lt;strong&gt;Tip&lt;/strong&gt;: this nginx server can be deployed on our registry server to serve static binaries / yaml files for bootstrapping scripts for our cluster as well as the images stored in its repositories.&lt;/p&gt;
+
+&lt;p&gt;There are a few Registry web UI which allow you to list repositories, images and tags for a v2 Registry, but several lack basic features.&lt;/p&gt;
+
+&lt;p&gt;Alternatively, the contents may be listed with the following &lt;code&gt;curl&lt;/code&gt; &amp;amp; &lt;code&gt;jq&lt;/code&gt; commands as well:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;#list repositories
+curl -s https://registry0.localdomain/v2/_catalog | jq -r .repositories[]
+#list tags of an image
+curl -s https://registry0.localdomain/v2/nginx/tags/list | jq -r .tags[]
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;For more actions, refer to the &lt;a href=&#34;https://github.com/docker/distribution/blob/v2.3.1/docs/spec/api.md#deleting-an-image&#34;&gt;Registry v2 API&lt;/a&gt;&lt;/p&gt;
+</description>
+    </item>
+    
+  </channel>
+</rss>

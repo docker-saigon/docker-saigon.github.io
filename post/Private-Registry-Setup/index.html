@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en-us">
+
+<head>
+
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="">
+    <meta name="author" content="">
+
+    <title>TLS secured Private Registries -- Docker Saigon</title>
+
+    
+
+    
+    <link href="http://docker-saigon.github.io/css/bootstrap.min.css" rel="stylesheet">
+
+    
+    <link href="http://docker-saigon.github.io/css/clean-blog.min.css" rel="stylesheet">
+
+    
+    <link href="http://maxcdn.bootstrapcdn.com/font-awesome/4.1.0/css/font-awesome.min.css" rel="stylesheet" type="text/css">
+    <link href='http://fonts.googleapis.com/css?family=Lora:400,700,400italic,700italic' rel='stylesheet' type='text/css'>
+    <link href='http://fonts.googleapis.com/css?family=Open+Sans:300italic,400italic,600italic,700italic,800italic,400,300,600,700,800' rel='stylesheet' type='text/css'>
+
+    
+    
+    
+
+</head>
+
+<body>
+
+    
+    <nav class="navbar navbar-default navbar-custom navbar-fixed-top">
+        <div class="container-fluid">
+            
+            <div class="navbar-header page-scroll">
+                <button type="button" class="navbar-toggle" data-toggle="collapse" data-target="#bs-example-navbar-collapse-1">
+                    <span class="sr-only">Toggle navigation</span>
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                </button>
+                <a class="navbar-brand" href="http://docker-saigon.github.io/">Docker Saigon</a>
+            </div>
+
+                       
+            <div class="collapse navbar-collapse" id="bs-example-navbar-collapse-1">
+                <ul class="nav navbar-nav navbar-right">
+                    
+                    <li>
+                        <a href="http://docker-saigon.github.io/">home</a>
+                    </li>
+                    
+                    <li>
+                        <a href="http://docker-saigon.github.io/about/">about</a>
+                    </li>
+                    
+                    <li>
+                        <a href="http://docker-saigon.github.io/post/">Archive</a>
+                    </li>
+                    
+                    <li>
+                        <a href="http://docker-saigon.github.io/contact/">contact</a>
+                    </li>
+                    
+                  </ul>
+            </div>
+           
+
+        </div>
+        
+    </nav>
+
+
+    
+    
+    <header class="intro-header" style="background-image: url('http://docker-saigon.github.io//img/private-registry.jpg')">
+      
+      <div class="container">
+        <div class="row">
+           <div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+             <div class="post-heading">
+               <h1>TLS Secured Private Registries</h1>
+               <h2 class="subheading">Creating A Private TLS Secured Registry With Docker-Machine</h2>
+               <span class="meta">Posted by <a href="#">Docker Saigon</a> on Tue, Mar 22, 2016
+                 <br />
+                 In <a href="http://docker-saigon.github.io/categories/registry" >Registry</a>, <a href="http://docker-saigon.github.io/categories/docker-machine" >Docker-Machine</a>, 
+
+                 <br />
+                 Tags <a href="http://docker-saigon.github.io/tags/docker-machine" >docker-machine</a> <a href="http://docker-saigon.github.io/tags/registry" >registry</a> <a href="http://docker-saigon.github.io/tags/tls" >tls</a> <a href="http://docker-saigon.github.io/tags/boot2docker" >boot2docker</a> 
+
+               </span>
+             </div>
+           </div>
+        </div>
+      </div>
+    </header>
+
+    
+    <article>
+        <div class="container">
+            <div class="row">
+                <div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+                  
+
+<p>An intermezzo after creating a small swarm cluster in <a href="http://docker-saigon.github.io/post/Swarm-Week-2016-Part1/">our previous post</a> and before deploying &amp; scaling the sample voting app on this cluster.</p>
+
+<p>In this post we will use <code>Docker-Machine</code> to provision a <code>Boot2Docker</code> host for a  local Docker <code>Registry</code> and explain how to configure other Machines (i.e. <code>Boot2Docker</code> &amp; <code>CoreOS</code> machines) to push and pull from this Registry using TLS.</p>
+
+<p>This setup is great for giving demonstrations where internet access is not guaranteed. We will not be configuring basic authentication or more advanced features such as web hooks, but provide links for how to do this.</p>
+
+<p>We will, again, be using Windows 10, Hyper-V and PowerShell for this setup (as there aren&rsquo;t many guides out there using this setup), but it should be trivial to repeat these steps on OSX.</p>
+
+<h2 id="1-create-configure-the-machine-to-host-the-registry:21a6fde08c8e60098cde90e87b1d737a">1. Create &amp; Configure the Machine to host the Registry</h2>
+
+<p>Use Docker-Machine to create a TLS secured Docker Engine. For the full details on our environment configuration, refer to our previous post on <a href="http://docker-saigon.github.io/post/Swarm-Week-2016-Part1/">How to create a Swarm cluster.</a></p>
+
+<p>As seen in that post, using Hyper-V and an elevated Powershell session with the <code>dm</code> alias (<code>New-Alias dm Docker-Machine</code>), we may run the following command to create our <code>registry0</code> machine:</p>
+
+<pre><code>dm create `
+ --driver hyperv `
+ --hyperv-virtual-switch &quot;VMWare NAT&quot; `
+ --hyperv-memory &quot;512&quot; registry0
+</code></pre>
+
+<p><strong>Note</strong>: As a result of the above command, <code>Docker-Machine</code> will have created a PKI for us. The Certificate Authority private key as well as self-signed CA certificate are stored under <code>~/.docker/machine/certs/</code>, we will use this information when generating the TLS assets for our registry.</p>
+
+<p>Configure a static IP (192.168.233.3) for the newly created machine.</p>
+
+<p>Using PowerShell with a single command from the Host:</p>
+
+<pre><code>echo &quot;kill ``more /var/run/udhcpc.eth0.pid```n`
+ifconfig eth0 192.168.233.3 netmask 255.255.255.0 broadcast 192.168.233.255 up`n`
+route add default gw 192.168.233.2&quot; | `
+dm ssh registry0 &quot;sudo tee /var/lib/boot2docker/bootsync.sh&quot; &gt; $null
+</code></pre>
+
+<p>(see Swarm post referred to earlier for a detailed explanation of these commands)</p>
+
+<p>Now, bounce the machine:</p>
+
+<pre><code>dm restart registry0
+</code></pre>
+
+<p>After changing the IP, we have to re-generate the certificates used by our <code>registry0</code> machine:</p>
+
+<pre><code>dm regenerate-certs registry0
+</code></pre>
+
+<p>Add DNS entries for <code>registry0</code> (in our setup, this is handled through the <code>/etc/hosts</code> file on the VM Host):</p>
+
+<pre><code>&quot;192.168.233.3 registry0`n192.168.233.3 registry0.localdomain&quot; | ac $env:Windir\System32\Drivers\etc\hosts
+</code></pre>
+
+<p><strong>Note</strong>: Requires an elevated PowerShell session.</p>
+
+<h2 id="2-prepare-the-tls-assets-for-the-registry:21a6fde08c8e60098cde90e87b1d737a">2. Prepare the TLS assets for the Registry</h2>
+
+<p>For convenience, we will use the PKI created by <code>Docker-Machine</code> to generate a signed certificate.</p>
+
+<p>First, generate the private key to be used by the registry server:</p>
+
+<pre><code>openssl genrsa -out registry-key.pem 2048
+</code></pre>
+
+<p>Next, we need to create a signing request. We will use a config file <code>registry-openssl.cnf</code> with the following contents:</p>
+
+<pre><code>[req]
+req_extensions = v3_req
+distinguished_name = req_distinguished_name
+[req_distinguished_name]
+[ v3_req ]
+basicConstraints = CA:FALSE
+keyUsage = nonRepudiation, digitalSignature, keyEncipherment
+subjectAltName = @alt_names
+[alt_names]
+DNS.1 = registry0.localdomain
+DNS.2 = registry0
+IP.1 = 192.168.233.3
+IP.2 = 192.168.150.104
+</code></pre>
+
+<p><strong>Note</strong>: Make sure to replace/add any hostnames and IPs the registry will be reachable on by other Docker Engines into the above snippet.</p>
+
+<p>Use the private key and the configuration file to create a certificate signing request (using git-bash):</p>
+
+<pre><code>openssl req -new -key registry-key.pem -out registry.csr -subj &quot;/CN=registry0.localdomain&quot; -config registry-openssl.cnf
+</code></pre>
+
+<p>Use the CA created by <code>Docker-Machine</code> to sign the certificate for the registry:</p>
+
+<pre><code>cp ~/.docker/machine/certs/ca*-pem .
+openssl x509 -req -in registry.csr -CA &quot;ca.pem&quot; -CAkey &quot;ca-key.pem&quot; -CAcreateserial -out &quot;registry.pem&quot; -days 365 -extensions v3_req -extfile registry-openssl.cnf
+</code></pre>
+
+<p>Copy the registry private key, signed certificate as well as certificate authority to the registry server:</p>
+
+<pre><code>scp -i ~/.docker/machine/machines/registry0/id_rsa registry.pem registry-key.pem ca.pem docker@registry0:.
+</code></pre>
+
+<h2 id="3-create-the-registry-container:21a6fde08c8e60098cde90e87b1d737a">3. Create the Registry Container</h2>
+
+<p>We now have all ingredients to run a basic registry server on the <code>registry0</code> Machine. We will use a minimal Registry configuration, refer to the <a href="https://docs.docker.com/registry/configuration/">official Docker docs</a> for more configuration options.</p>
+
+<p>SSH to our Machine with <code>dm ssh registry0</code> or alternatively with the following command:</p>
+
+<pre><code>ssh -i ~/.docker/machine/machines/registry0/id_rsa docker@registry0
+</code></pre>
+
+<p>Prepare the folder structure and data for the registry server</p>
+
+<pre><code>sudo -i
+mkdir /var/lib/boot2docker/registry-certs/
+mkdir /var/lib/boot2docker/registry-data/
+mv ~docker/registry-*.pem /var/lib/boot2docker/registry-certs/
+</code></pre>
+
+<p>Start the Registry container (this will pull the image automatically from the Docker Hub):</p>
+
+<pre><code>docker run -d -p 443:5000 --restart=always --name registry \
+  -v /var/lib/boot2docker/registry-certs:/certs \
+  -e REGISTRY_HTTP_TLS_CERTIFICATE=/certs/registry.pem \
+  -e REGISTRY_HTTP_TLS_KEY=/certs/registry-key.pem \
+  -v /var/lib/boot2docker/registry-data:/var/lib/registry \
+  registry:2
+</code></pre>
+
+<p><strong>Note</strong>: may need to chain the <code>registry.pem</code> certificate with the <code>ca.pem</code> certificate for this to work (to be confirmed)</p>
+
+<p>From any other machine, confirm the registry works with the following command (assuming <code>ca.pem</code> lives in <code>PWD</code>)</p>
+
+<pre><code>curl --cacert ca.pem https://registry0/v2/
+</code></pre>
+
+<p><strong>Note</strong>: To give an example of the more advanced configuration options, refer to <a href="https://docs.docker.com/registry/configuration/#notifications">the configuration of webhooks</a>:</p>
+
+<p><code>REGISTRY_NOTIFICATIONS_ENDPOINTS_{name,url,headers, ...}</code> ENV variables which allow us to call out systems such as <a href="https://github.com/ehazlett/conduit">Conduit</a> and automatically deploy images a build server may push to this registry.</p>
+
+<p><img src="http://docker-saigon.github.io/img/notifications.png" alt="registry notifications" /></p>
+
+<p>A more complicated setup may be managed through <code>Docker-Compose</code>.</p>
+
+<h2 id="4-ensuring-your-docker-engine-can-push-pull-from-this-registry:21a6fde08c8e60098cde90e87b1d737a">4. Ensuring your Docker Engine can push/pull from this registry.</h2>
+
+<p>Servers who do not trust the CA which signed the Registry certificate will not be able to push/pull from our Registry. The steps below show how to make a server trust our CA.</p>
+
+<h3 id="for-boot2docker-machines:21a6fde08c8e60098cde90e87b1d737a">For Boot2Docker machines:</h3>
+
+<p>Add the Certificate Authority to a <code>Boot2Docker</code> machine (See: <a href="https://github.com/boot2docker/boot2docker/blob/v1.10.3/README.md#installing-secure-registry-certificates">B2d - Installing Secure Registry Certificates</a>):</p>
+
+<pre><code>dm scp ca.pem &lt;machine&gt;:~
+dm ssh &lt;machine&gt; sudo mkdir -p /var/lib/boot2docker/certs/
+dm ssh &lt;machine&gt; sudo mv ~/ca.pem /var/lib/boot2docker/certs/
+dm restart &lt;machine&gt;
+</code></pre>
+
+<p>Once you the machine has rebooted, it will be able to push/pull from the registry.</p>
+
+<h3 id="for-coreos-machines:21a6fde08c8e60098cde90e87b1d737a">For CoreOS machines:</h3>
+
+<p>Similar to Boot2Docker, add the Certificate Authority and update the certificates:</p>
+
+<pre><code>scp ca.pem core@&lt;machine&gt;:~
+ssh core@&lt;machine&gt; sudo mv ca.pem /etc/ssl/certs
+ssh core@&lt;machine&gt; sudo update-ca-certificates
+</code></pre>
+
+<h3 id="for-ubuntu-debian-rhel-centos:21a6fde08c8e60098cde90e87b1d737a">For Ubuntu, Debian, RHEL, CentOS, &hellip;</h3>
+
+<p>Refer to the <a href="https://docs.docker.com/docker-trusted-registry/configure/config-security/#install-registry-certificates-on-client-docker-daemons">official documentation</a> from the DTR (the setup is the same for our TLS secured private registry).</p>
+
+<h2 id="5-usage-tips-for-your-private-registry:21a6fde08c8e60098cde90e87b1d737a">5. Usage tips for your private Registry</h2>
+
+<p>To pull a Docker Image from the Hub and make it available on your local registry, enter the following commands (example with the official alpine-based nginx image):</p>
+
+<pre><code>docker pull nginx:mainline-alpine
+docker tag nginx:mainline-alpine registry0.localdomain/nginx:mainline-alpine
+docker push registry0.localdomain/nginx:mainline-alpine
+</code></pre>
+
+<p>From then on, all local machines may easily serve static content with the following command:</p>
+
+<pre><code>docker run -d --name web -v --restart=always /path/to/html:/etc/nginx/html:ro registry0.localdomain/nginx:mainline-alpine
+</code></pre>
+
+<p><strong>Tip</strong>: this nginx server can be deployed on our registry server to serve static binaries / yaml files for bootstrapping scripts for our cluster as well as the images stored in its repositories.</p>
+
+<p>There are a few Registry web UI which allow you to list repositories, images and tags for a v2 Registry, but several lack basic features.</p>
+
+<p>Alternatively, the contents may be listed with the following <code>curl</code> &amp; <code>jq</code> commands as well:</p>
+
+<pre><code>#list repositories
+curl -s https://registry0.localdomain/v2/_catalog | jq -r .repositories[]
+#list tags of an image
+curl -s https://registry0.localdomain/v2/nginx/tags/list | jq -r .tags[]
+</code></pre>
+
+<p>For more actions, refer to the <a href="https://github.com/docker/distribution/blob/v2.3.1/docs/spec/api.md#deleting-an-image">Registry v2 API</a></p>
+
+                </div>
+            </div>
+        </div>
+    </article>
+
+    <hr>
+    
+    <footer>
+        <div class="container">
+            <div class="row">
+                <div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+                  <ul class="list-inline text-center">
+                    <li>
+                      <a href="mailto:docker-saigon@gmail.com">
+                        <span class="fa-stack fa-lg">
+                          <i class="fa fa-circle fa-stack-2x"></i>
+                          <i class="fa fa-envelope-o fa-stack-1x fa-inverse"></i>
+                        </span>
+                      </a>
+                    </li>
+                    
+                    <li>
+                      <a href="https://twitter.com/docker_saigon">
+                        <span class="fa-stack fa-lg">
+                          <i class="fa fa-circle fa-stack-2x"></i>
+                          <i class="fa fa-twitter fa-stack-1x fa-inverse"></i>
+                        </span>
+                      </a>
+                    </li>
+                    
+                    <li>
+                      <a href="https://www.youtube.com/channel/UC1t_GbTJudAAK9Wqkg6-uLw">
+                        <span class="fa-stack fa-lg">
+                          <i class="fa fa-circle fa-stack-2x"></i>
+                          <i class="fa fa-youtube fa-stack-1x fa-inverse"></i>
+                        </span>
+                      </a>
+                    </li>
+                    
+                    <li>
+                      <a href="https://github.com/docker-saigon">
+                        <span class="fa-stack fa-lg">
+                          <i class="fa fa-circle fa-stack-2x"></i>
+                          <i class="fa fa-github fa-stack-1x fa-inverse"></i>
+                        </span>
+                      </a>
+                    </li>
+                    
+                    <li>
+                      <a href="https://www.facebook.com/DockerSaigon">
+                        <span class="fa-stack fa-lg">
+                          <i class="fa fa-circle fa-stack-2x"></i>
+                          <i class="fa fa-facebook fa-stack-1x fa-inverse"></i>
+                        </span>
+                      </a>
+                    </li>
+                    
+                  </ul>
+                  <p class="copyright text-muted">Code released under the Apache 2.0 license.</p>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    
+    <script src="http://docker-saigon.github.io/js/jquery.min.js"></script>
+
+    
+    <script src="http://docker-saigon.github.io/js/bootstrap.min.js"></script>
+
+    
+    <script src="http://docker-saigon.github.io/js/clean-blog.js"></script>
+
+    
+<script>
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+    (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+    m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+  ga('create', 'UA-69412248-1', 'auto');
+  ga('send', 'pageview');
+</script>
+
+
+</body>
+
+</html>
+

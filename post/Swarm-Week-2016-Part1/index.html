@@ -116,7 +116,7 @@
 <li>as a config store for other cluster components (i.e Interlock config).</li>
 </ul>
 
-<p>Swarm makes use of the <a href="https://github.com/docker/libkv">libkv</a> library to support multiple store backends (<code>etcd</code>,<code>zookeeper</code>,..).</p>
+<p>Swarm makes use of the <a href="https://github.com/docker/libkv">libkv</a> library to support not only consul but multiple store backends: (<code>etcd</code>,<code>zookeeper</code>,..).</p>
 
 <p>All Docker Engines will be created through <code>Docker-Machine</code> with TLS enabled. Additionally, we will see <strong>how to configure Boot2Docker with a static IP</strong> and install the <a href="https://github.com/gondor/docker-volume-netshare">netshare</a> <code>Volume Driver</code> to <strong>mount VM host folders across all cluster nodes for persistence</strong> - allowing any statefull containers to be re-scheduled on different nodes without loss of data.</p>
 
@@ -132,7 +132,7 @@
 
 <p>The quickest way to get everything ready on Windows would be by installing <a href="https://github.com/git-for-windows">git-for-windows</a> and the <a href="https://www.docker.com/products/docker-toolbox">Docker Toolbox</a> (VirtualBox).</p>
 
-<p>However, <strong>if you are required use the Hyper-V role&hellip;</strong> - the Docker Toolbox can/should not be used.</p>
+<p>However, <strong>if you are required to use the Hyper-V role&hellip;</strong> - the Docker Toolbox can/should not be used.</p>
 
 <p>The following steps will guide you how to use <code>docker</code>, <code>docker-machine</code> and <code>docker-compose</code> with Hyper-V on Windows 10 (64 bit):</p>
 
@@ -141,20 +141,20 @@
 
 <p>Before <a href="http://www.thomasmaurer.ch/2015/11/hyper-v-virtual-switch-using-nat-configuration/">NAT support was added to Hyper-V (Q3 2015)</a> in Windows 10, it was recommended to <a href="http://thomasvochten.com/archive/2014/01/hyper-v-nat/">use VMWare&rsquo;s NAT &amp; DHCP services with Hyper-V</a>.</p>
 
-<p>It is also a possible to use Internet Connection Sharing (ICS) with you Virtual Network, but I strongly advise against it. ICS requires manual re-configuration when switching between Ethernet and WiFi adapters, which is not suitable.</p>
+<p>It is also possible to use Internet Connection Sharing (ICS) with your Virtual Network, but I strongly advise against it. ICS requires manual re-configuration when switching between Ethernet and WiFi adapters, which is not suitable.</p>
 
-<p>At the time of writing, I still prefer to use the VMWare networking services with Hyper-V as it provides the most features. You could even extract the <code>vmnetconfig.exe</code> UI tool from the VMWare Workstation installation source to easily manage your virtual networks (after only installing VMWare Player components):
+<p>At the time of writing, I still prefer to use the VMWare networking services with Hyper-V as it still provides the most features. You could even extract the <code>vmnetconfig.exe</code> UI tool from the VMWare Workstation installation source to easily manage your virtual networks (after only installing VMWare Player components):
  <img src="http://docker-saigon.github.io/img/hyper-v-vmnetconf.png" alt="vmnetconf" /></p>
 
 <p>The VM networking services provided by the VMWare tools also include a DNS server which forwards any DNS requests from VMs to the host machine. This means that you only need to maintain the <code>etc/hosts</code> file centrally on the Hyper-V host for easy, IP-less, inter-VM communication.</p>
 
 <p>Before we move on, note down the name of your Virtual Switch configured with VMWare NAT, mine is <code>VMWare Nat</code>.</p>
 
-<p>If you decide to use the new NAT switches supported by Hyper-V on Windows 10, you will still need to find a solution for <a href="https://4sysops.com/archives/native-nat-in-windows-10-hyper-v-using-a-nat-virtual-switch/#dhcp-server-for-windows">DHCP</a> as well as <a href="http://unbound.net/index.html">DNS</a>.</p></li>
+<p>However, if you decide to use the new NAT switches introduced for Hyper-V on Windows 10, you will still need to find a solution for <a href="https://4sysops.com/archives/native-nat-in-windows-10-hyper-v-using-a-nat-virtual-switch/#dhcp-server-for-windows">DHCP</a> as well as <a href="http://unbound.net/index.html">DNS</a>.</p></li>
 
 <li><p>Git, ssh, scp, openssl, &hellip;</p>
 
-<p>Installing <a href="https://github.com/git-for-windows">git-for-windows</a> is mandatory for a decent console experience on Windows. The git-for-windows bundle also removes the need for putty, plink &amp; pageant when working with remote Linux machines.</p>
+<p>Installing <a href="https://github.com/git-for-windows">git-for-windows</a> is mandatory for a decent console experience on Windows. The git-for-windows bundle also removes the need for putty, plink &amp; pageant when working with Linux machines.</p>
 
 <p>Even though the Windows 10 console has greatly improved (transparency, multi-line selections, full-screen mode, <code>CTRL+C/V</code> support, &hellip;), I still recommend the usage of <a href="https://conemu.github.io/">ConEmu</a> as it has more features (quickly splitting console panels, switching between consoles, configurable short-cuts, &hellip;).</p></li>
 
@@ -209,7 +209,7 @@
 
 <li><p>Shared Folder Set-up</p>
 
-<p>For this demo we assume a <code>demo</code> user with password <code>demo</code> is created on the Hyper-V host and a folder share accessible to this user exists under the name <code>demo</code>.</p></li>
+<p>For this demo we assume a <code>demo</code> user with password <code>demo</code> is created on the Hyper-V host and a folder share read/writeable to this user exists under the name <code>demo</code>.</p></li>
 </ol>
 
 <h2 id="set-up-the-key-value-store:e3eed6f67421eff48e81c37460ec6ac3">Set up the Key Value Store</h2>
@@ -234,7 +234,7 @@
 
 <li><p>Set a Static IP (<a href="https://github.com/docker/machine/issues/1709">ref</a>) and reboot the machine.</p>
 
-<p>In this sample setup, VMs use the <code>192.168.233.0/24</code> subnet with the NAT gateway on <code>192.168.233.2</code> and a DHCP range of <code>128-254</code>. We will assign <code>192.168.233.5</code> as the static IP for our Consul node. Keep in mind you may need to update these values to match your configuration.</p>
+<p>In this sample setup, VMs use the <code>192.168.233.0/24</code> subnet with the NAT gateway on <code>192.168.233.2</code> and a DHCP range of <code>128-254</code>. We will assign <code>192.168.233.10</code> as the static IP for our Consul node. Keep in mind you may need to update these values to match your configuration.</p>
 
 <p>By default, DHCP is enabled on the Boot2Docker interfaces, but we may disable it by killing the process managing a particular interface:</p>
 
@@ -411,7 +411,7 @@ ac $env:Windir\System32\Drivers\etc\hosts
 </tbody>
 </table>
 
-<p>Combining the above information, this how we may create our Swarm Manager with Docker-Machine using Powershell:</p>
+<p>Combining the above information, this is how we may create our Swarm Manager with Docker-Machine using Powershell:</p>
 
 <pre><code>dm create `
  --driver hyperv `
@@ -574,12 +574,12 @@ dm env --swarm master0 | iex
 <pre><code>docker run -dit --name container2 --net nw -v 192.168.233.1/demo:/demo alpine sh
 </code></pre>
 
-<p>Confirm Swarm is using the <code>spread</code> scheduling strategy by default and ran each container on a separate node</p>
+<p>Confirm Swarm is using the <code>spread</code> scheduling strategy by default and ran each container on a separate node:</p>
 
 <pre><code>docker ps
 </code></pre>
 
-<p>Confirm container can ping container2 can ping container1 (even though they are running on different nodes)</p>
+<p>Confirm container1 can ping container2 (even though they are running on different nodes and using hostnames instead of IPs):</p>
 
 <pre><code>docker exec -it container1 ping container2
 </code></pre>
@@ -589,7 +589,7 @@ dm env --swarm master0 | iex
 <pre><code>docker exec -it container1 touch /demo/fromcontainer1
 </code></pre>
 
-<p>Confirm any files created by container1 are accessible to</p>
+<p>Confirm any files created by container1 are accessible to container2:</p>
 
 <pre><code>docker exec -it container2 ls -l /demo/
 </code></pre>
