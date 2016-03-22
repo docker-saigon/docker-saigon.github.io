@@ -169,7 +169,7 @@ dm ssh &amp;lt;machine&amp;gt; sudo mv ~/ca.pem /var/lib/boot2docker/certs/
 dm restart &amp;lt;machine&amp;gt;
 &lt;/code&gt;&lt;/pre&gt;
 
-&lt;p&gt;Once you the machine has rebooted, it will be able to push/pull from the registry.&lt;/p&gt;
+&lt;p&gt;Once the machine has rebooted, you will be able to push/pull from the local registry.&lt;/p&gt;
 
 &lt;h3 id=&#34;for-coreos-machines:21a6fde08c8e60098cde90e87b1d737a&#34;&gt;For CoreOS machines:&lt;/h3&gt;
 
