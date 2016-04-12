@@ -251,6 +251,8 @@
 
 <p>A higher level overview is available (and was used as a reference) in the <a href="See also: [Understanding the Docker architecture](https://docs.docker.com/engine/understanding-docker/">Official Docker documentation</a>)</p>
 
+<p>UPDATE: See Also <a href="http://containersummit.io/events/nyc-2016/videos/building-containers-in-pure-bash-and-c">jfrazelle&rsquo;s talk</a> @ container summit February 2016</p>
+
 <h3 id="kernel-namespaces:cb6baf67dddd3a71c07abfd705dc7d4b">Kernel Namespaces</h3>
 
 <p>Allow you to create isolation of:</p>
@@ -923,6 +925,8 @@ lxc-destroy -n mycontainer
 
 <p>Interesting Read: <a href="https://www.hastexo.com/blogs/florian/2016/02/21/containers-just-because-everyone-else/">Linux Containers without Docker using OverlayFS &amp; Ansible</a>.</p>
 
+<p>the LXC project has been working on a more user-friendly Daemon similar to the Docker daemon called <a href="https://linuxcontainers.org/lxd/introduction/">LXD</a> since November 2014.</p>
+
 <h3 id="systemd-nspawn:cb6baf67dddd3a71c07abfd705dc7d4b">Systemd-nspawn</h3>
 
 <p>Originally created to debug the Systemd init system, future versions to be more integrated in the core of the OS (the most low-level and minimal approach to make containers native to the OS).</p>
@@ -976,7 +980,8 @@ systemdctl            machinectl            hostnamectl         journalctl
  nsenter -m -u -i -n -p -t $PID
 </code></pre>
 
-<p><a href="https://chimeracoder.github.io/docker-without-docker/#18">see also - Docker without Docker</a></p>
+<p><a href="https://chimeracoder.github.io/docker-without-docker/#18">see also - Docker without Docker</a>
+<a href="https://github.com/Fewbytes/rubber-docker">see also - Rubber Docker Workshop</a> - <a href="https://docs.google.com/presentation/d/10vFQfEUvpf7qYyksNqiy-bAxcy-bvF0OnUElCOtTTRc/edit#slide=id.g1012f66722_0_8">Prep Slides</a></p>
 
 <h3 id="runc:cb6baf67dddd3a71c07abfd705dc7d4b">runC</h3>
 
@@ -1048,12 +1053,14 @@ cd ~
  runc spec
 
  # start the container
- run start test
+ runc start test
 
  # confirm we are now in busybox container
  /bin/busybox
  ps -a 
 </code></pre>
+
+<p>Alternatively download image layers from a registry using tianon&rsquo;s script <a href="https://github.com/docker/docker/blob/v1.10.3/contrib/download-frozen-image-v2.sh">download-forzen-image-v2.sh</a></p>
 
 <p>Or with <code>debootstrap</code> &hellip;</p>
 
@@ -1065,6 +1072,8 @@ cd debian_wheezy
 runc spec
 runc start debian
 </code></pre>
+
+<p>You can use post-start hooks (in <code>config.json</code>) to call additional binaries/scripts to do things such as set up the virtual bridge and veth pair and iptable rules for your container.</p>
 
 <h2 id="docker-api:cb6baf67dddd3a71c07abfd705dc7d4b">Docker API</h2>
 

@@ -1,0 +1,253 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Production on Docker Saigon</title>
+    <link>http://docker-saigon.github.io/tags/production/</link>
+    <description>Recent content in Production on Docker Saigon</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en-us</language>
+    <copyright>Code released under the Apache 2.0 license.</copyright>
+    <lastBuildDate>Mon, 11 Apr 2016 20:17:12 +0700</lastBuildDate>
+    <atom:link href="http://docker-saigon.github.io/tags/production/index.xml" rel="self" type="application/rss+xml" />
+    
+    <item>
+      <title>Docker Caveats</title>
+      <link>http://docker-saigon.github.io/post/Docker-Caveats/</link>
+      <pubDate>Mon, 11 Apr 2016 20:17:12 +0700</pubDate>
+      
+      <guid>http://docker-saigon.github.io/post/Docker-Caveats/</guid>
+      <description>
+
+&lt;p&gt;We can&amp;rsquo;t deny Linux Containers are a very powerful concept combining clever Linux kernel features and Docker&amp;rsquo;s open source tools make containers easily accessible to developers of any background.&lt;/p&gt;
+
+&lt;p&gt;At container summit 2016, &lt;a href=&#34;https://twitter.com/bcantrill&#34;&gt;Bryan Cantrill&lt;/a&gt; eloquently compared the industry disruption this causes, and the issues mass industry adoption entails, to the issues which may show up after &lt;a href=&#34;http://containersummit.io/events/nyc-2016/videos/the-evolving-container-ecosystem&#34;&gt;you&amp;rsquo;ve taught peasants to read&lt;/a&gt; &lt;em&gt;(about 28 minutes into the linked video of the panel discussion).&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;Issues such as: improper usage of the technology and unpleasant surprises due to a poor understanding of the underlying features enabling the technology.&lt;/p&gt;
+
+&lt;p&gt;Yesterday, a brilliant Downfall parody made by &lt;a href=&#34;https://twitter.com/nukemberg&#34;&gt;Avishai Ish-Shalom&lt;/a&gt; highlights some of the surprises &amp;amp; frustrations which may cause shock to those that are unprepared:&lt;/p&gt;
+
+&lt;blockquote class=&#34;twitter-tweet&#34;&gt;&lt;p lang=&#34;en&#34; dir=&#34;ltr&#34;&gt;This is hilarious! Hitler uses Docker &lt;a href=&#34;https://t.co/cmXB2Clj8D&#34;&gt;https://t.co/cmXB2Clj8D&lt;/a&gt; &lt;br&gt;&lt;br&gt;via &lt;a href=&#34;https://twitter.com/nukemberg&#34;&gt;@nukemberg&lt;/a&gt; ht &lt;a href=&#34;https://twitter.com/m1keil&#34;&gt;@m1keil&lt;/a&gt;  &lt;a href=&#34;https://twitter.com/hashtag/linux?src=hash&#34;&gt;#linux&lt;/a&gt; &lt;a href=&#34;https://twitter.com/hashtag/cloudcomputing?src=hash&#34;&gt;#cloudcomputing&lt;/a&gt; &lt;a href=&#34;https://twitter.com/hashtag/devops?src=hash&#34;&gt;#devops&lt;/a&gt; &lt;a href=&#34;https://twitter.com/hashtag/sysadmin?src=hash&#34;&gt;#sysadmin&lt;/a&gt;&lt;/p&gt;&amp;mdash; nixCraft (@nixcraft) &lt;a href=&#34;https://twitter.com/nixcraft/status/719146833558183936&#34;&gt;April 10, 2016&lt;/a&gt;&lt;/blockquote&gt;
+&lt;script async src=&#34;//platform.twitter.com/widgets.js&#34; charset=&#34;utf-8&#34;&gt;&lt;/script&gt;
+
+&lt;p&gt;In this blog post, we&amp;rsquo;d like to take a look at each of these statements and deconstruct them for a better understanding of what makes this short so clever, while at the same time - it serves as a great caveat for anyone hoping to get the best out of running Docker in production.&lt;/p&gt;
+
+&lt;h2 id=&#34;isolation:4c461b6a7a614440939d8002a0e574c8&#34;&gt;Isolation&lt;/h2&gt;
+
+&lt;p&gt;The video starts with what looks like a very popular CI/CD setup using Docker&amp;rsquo;s public image registry, the Docker Hub and its multi-container management tool, Docker-Compose. Although it should be noted that Docker-Compose is still primarily aimed at Development and Testing environments and is probably not suited for larger production deployments, as clearly outlined in the &lt;a href=&#34;https://docs.docker.com/compose/production/&#34;&gt;Docker docs&lt;/a&gt; at the time of this blog post.&lt;/p&gt;
+
+
+&lt;figure &gt;
+    
+        &lt;img src=&#34;http://docker-saigon.github.io/img/caveat/caveat01.png&#34; alt=&#34;Untrusted Images&#34; /&gt;
+    
+    
+&lt;/figure&gt;
+
+
+
+&lt;figure &gt;
+    
+        &lt;img src=&#34;http://docker-saigon.github.io/img/caveat/caveat02.png&#34; alt=&#34;Kernel Panic in a Shared Kernel&#34; /&gt;
+    
+    
+&lt;/figure&gt;
+
+
+&lt;p&gt;&lt;strong&gt;This highlights a first issue of sharing the kernel: reduced reliability and redundancy.&lt;/strong&gt;&lt;/p&gt;
+
+
+&lt;figure &gt;
+    
+        &lt;img src=&#34;http://docker-saigon.github.io/img/caveat/caveat03.png&#34; alt=&#34;Isolation my ass!&#34; /&gt;
+    
+    
+&lt;/figure&gt;
+
+
+&lt;p&gt;We believe, the take-away here should be:&lt;/p&gt;
+
+&lt;blockquote&gt;
+&lt;p&gt;Containers should not be used without ensuring that reliability and redundancy of every resource is incorporated into the overall design of your infrastructure.&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;You may gain back reliability by using shared storage, service orchestration, monitoring and a framework with built-in self-healing features such as &lt;a href=&#34;http://container-solutions.com/rescheduling-containers-on-node-failures-with-docker-swarm-1-1/&#34;&gt;the container rescheduling on node failure&amp;rdquo;  features added to Swarm&lt;/a&gt;; Or the ingrained concept of &amp;ldquo;The Reconciliation Loop&amp;rdquo; in &lt;a href=&#34;http://kubernetes.io/docs/user-guide/replicasets/&#34;&gt;Kubernetes ReplicaSets&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;Although a snarky comment on the above is also included in the video:&lt;/p&gt;
+
+
+&lt;figure &gt;
+    
+        &lt;img src=&#34;http://docker-saigon.github.io/img/caveat/caveat09.png&#34; alt=&#34;Keep it Simple, Stupid&#34; /&gt;
+    
+    
+    &lt;figcaption&gt;
+        &lt;p&gt;
+        
+        &lt;a href=&#34;https://twitter.com/hashtag/GIFEE&#34;&gt; 
+            #GIFEE
+        &lt;/a&gt; 
+        &lt;/p&gt; 
+    &lt;/figcaption&gt;
+    
+&lt;/figure&gt;
+
+
+&lt;p&gt;Later on, another concern related to the implementation of isolation provided by container runtimes is also highlighted:&lt;/p&gt;
+
+
+&lt;figure &gt;
+    
+        &lt;img src=&#34;http://docker-saigon.github.io/img/caveat/caveat08.png&#34; alt=&#34;Resource Isolation in a Shared Kernel&#34; /&gt;
+    
+    
+&lt;/figure&gt;
+
+
+&lt;p&gt;Disillusionment comes from treating Docker like magic.&lt;/p&gt;
+
+&lt;p&gt;Covered in detail by &lt;a href=&#34;https://www.youtube.com/watch?v=sK5i-N34im8&#34;&gt;Jérôme Petazzoni in his DockerCon EU 2015 presentation&lt;/a&gt;, control groups are integral to what makes up a linux container and fundamental to the resource usage control per process group. A fix for the above complaint is added to Docker 1.11, details can be found in the below Twitter conversation between the video creator and Docker maintainer &lt;a href=&#34;https://github.com/jfrazelle&#34;&gt;@jfrazelle&lt;/a&gt;:&lt;/p&gt;
+
+&lt;blockquote class=&#34;twitter-tweet&#34;&gt;&lt;p lang=&#34;en&#34; dir=&#34;ltr&#34;&gt;&lt;a href=&#34;https://twitter.com/frazelledazzell&#34;&gt;@frazelledazzell&lt;/a&gt; &lt;a href=&#34;https://twitter.com/francesc&#34;&gt;@francesc&lt;/a&gt; &lt;a href=&#34;https://twitter.com/nixcraft&#34;&gt;@nixcraft&lt;/a&gt; &lt;a href=&#34;https://twitter.com/m1keil&#34;&gt;@m1keil&lt;/a&gt;  nproc cgroup support will only be in 1.11.0&lt;a href=&#34;https://t.co/lCKjdNmx5Y&#34;&gt;https://t.co/lCKjdNmx5Y&lt;/a&gt;&lt;/p&gt;&amp;mdash; Avishai Ish-Shalom (@nukemberg) &lt;a href=&#34;https://twitter.com/nukemberg/status/719326696084606978&#34;&gt;April 11, 2016&lt;/a&gt;&lt;/blockquote&gt;
+&lt;script async src=&#34;//platform.twitter.com/widgets.js&#34; charset=&#34;utf-8&#34;&gt;&lt;/script&gt;
+
+&lt;p&gt;Care is also required surrounding entropy depletion in cloud environments, which is certainly very relevant in shared-kernel scenarios and we may refer to &lt;a href=&#34;https://github.com/gesellix/haveged&#34;&gt;HAVEGED&lt;/a&gt; as a work-around for this.&lt;/p&gt;
+
+&lt;h2 id=&#34;image-security:4c461b6a7a614440939d8002a0e574c8&#34;&gt;Image Security&lt;/h2&gt;
+
+&lt;p&gt;The 2nd issue highlighted above was the mis-placed trust in container images pulled from public registries.&lt;/p&gt;
+
+
+&lt;figure &gt;
+    
+        &lt;img src=&#34;http://docker-saigon.github.io/img/caveat/caveat04.png&#34; alt=&#34;Untrusted Images&#34; /&gt;
+    
+    
+&lt;/figure&gt;
+
+
+&lt;p&gt;The very apt &amp;ldquo;&lt;a href=&#34;http://sobersecurity.blogspot.com.ee/2016/03/containers-are-like-sandwiches.html&#34;&gt;Sandwich Analogy&lt;/a&gt;&amp;rdquo; does a great job explaining why using non-official public images from the Docker Hub should be a concern.&lt;/p&gt;
+
+&lt;blockquote&gt;
+&lt;p&gt;Let&amp;rsquo;s think about Containers in the context of Sandwiches. You can pick up a sandwich. You can look at it, you can tell basically what&amp;rsquo;s going on inside. Are there tomatoes? Lettuce? Ham? Turkey? It&amp;rsquo;s not that hard. There can be things hiding, but for the most part you can get the big details. This is just like a container. Fedora? Red Hat? Ubuntu? It has httpd, great. What about a shell? systemd? Cool. There can be scary bits hidden in there too. Someone decided to replace /bin/sh with a python script? That&amp;rsquo;s just like hiding the olives under the lettuce. What sort of monster would do such a thing!&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;The security of image contents was big in the news all of 2014 &amp;amp; 2015. Docker has been working diligently to add the required building blocks to fill the gaps. &lt;a href=&#34;https://docs.docker.com/engine/userguide/storagedriver/imagesandcontainers/#content-addressable-storage&#34;&gt;Content Addressable image layers&lt;/a&gt; to verify image content against signed manifests, Registry repositories with proper pull validation no longer requiring Image IDs to be treated as secrets, &lt;a href=&#34;https://blog.docker.com/2015/11/dockercon-eu-2015-docker-universal-control-plane/&#34;&gt;Nautilus deep inspections&lt;/a&gt; on the hub ensuring exposed vulnerabilities are patched in the &lt;strong&gt;official&lt;/strong&gt; public Images, &lt;a href=&#34;https://blog.docker.com/2016/02/docker-engine-1-10-security/&#34;&gt;User Namespaces, Seccomp and AppArmor profiles&lt;/a&gt; as well as &lt;a href=&#34;https://blog.docker.com/2015/12/docker-webinar-qa-intro-to-docker-security/&#34;&gt;other Security additions&lt;/a&gt; to the Docker Engine, &amp;hellip;.&lt;/p&gt;
+
+&lt;p&gt;Refer also to the &lt;a href=&#34;https://docs.docker.com/engine/security/&#34;&gt;Docker docs&lt;/a&gt; and &lt;a href=&#34;https://www.docker.com/docker-security&#34;&gt;the Docker Security Portal&lt;/a&gt;.&lt;/p&gt;
+
+&lt;h2 id=&#34;docker-defaults:4c461b6a7a614440939d8002a0e574c8&#34;&gt;Docker Defaults&lt;/h2&gt;
+
+&lt;p&gt;As highlighted in our &lt;a href=&#34;http://docker-saigon.github.io/post/Docker-Internals/&#34;&gt;Docker Internals&lt;/a&gt; blog post, if your Linux Kernel &amp;gt; 2.6.x - you need to disable the &lt;code&gt;userland-proxy&lt;/code&gt; on the Docker daemon in favor of Hairpin NAT!&lt;/p&gt;
+
+
+&lt;figure &gt;
+    
+        &lt;img src=&#34;http://docker-saigon.github.io/img/caveat/caveat13.png&#34; alt=&#34;docker-proxy&#34; /&gt;
+    
+    
+&lt;/figure&gt;
+
+
+&lt;p&gt;In general, careful study of the docker defaults is required to ensure the optimal configuration for your environment and use-case. Things such as selecting the appropriate Copy-on-Write Filesystem are all covered in the Docker docs.&lt;/p&gt;
+
+&lt;h2 id=&#34;containers-vs-vms:4c461b6a7a614440939d8002a0e574c8&#34;&gt;Containers vs VMs&lt;/h2&gt;
+
+&lt;p&gt;Containers provide significant advantages over Virtual Machines for the use of &amp;ldquo;Application Packaging&amp;rdquo; due to the fact that they take a short time to build, are moved around easily and can start and stop very quickly compared to VMs.&lt;/p&gt;
+
+
+&lt;figure &gt;
+    
+        &lt;img src=&#34;http://docker-saigon.github.io/img/caveat/caveat05.png&#34; alt=&#34;Inception&#34; /&gt;
+    
+    
+&lt;/figure&gt;
+
+
+&lt;p&gt;Unfortunately, in Windows &amp;amp; OSX - virtualisation is required to run the Linux kernel and work with Linux containers. If this is not fully understood, this may cause frustration.&lt;/p&gt;
+
+&lt;p&gt;Docker is also improving this with the newest Docker client (which is in private beta at the time of writing). The approach used by the newer Docker clients integrates more deeply with the host operating system which greatly streamlines the developer experience on non-Linux operating systems.&lt;/p&gt;
+
+&lt;h2 id=&#34;distribution-deployment:4c461b6a7a614440939d8002a0e574c8&#34;&gt;Distribution &amp;amp; Deployment&lt;/h2&gt;
+
+&lt;p&gt;The Docker tools not only popularized Container technology, they also included critical shipping functionality making Containers an increasingly popular way to package and deploy code. Container images solve many real-world problems with existing packaging and deployment tools.&lt;/p&gt;
+
+
+&lt;figure &gt;
+    
+        &lt;img src=&#34;http://docker-saigon.github.io/img/caveat/caveat06.png&#34; alt=&#34;Bloated Images&#34; /&gt;
+    
+    
+&lt;/figure&gt;
+
+
+
+&lt;figure &gt;
+    
+        &lt;img src=&#34;http://docker-saigon.github.io/img/caveat/caveat07.png&#34; alt=&#34;Use Package Managers&#34; /&gt;
+    
+    
+&lt;/figure&gt;
+
+
+&lt;p&gt;However, as containers were being adopted by the masses without differentiating them from the way Virtual Machines tend to be used, images were often shipped with full Linux distributions and countless unnecessary binaries packaged within. This does not only bloat the images, causing slow deployment times, but also increases the attack surface for the application running in production.&lt;/p&gt;
+
+&lt;p&gt;Luckily the community has been adopting slim &lt;code&gt;Application containers&lt;/code&gt;, using minimal Linux distributions such as Alpine - which is now being &lt;a href=&#34;https://news.ycombinator.com/item?id=11000378&#34;&gt;used for all the Official docker images&lt;/a&gt; and statically compiled binaries that only rely on the kernel they are built for.&lt;/p&gt;
+
+
+&lt;figure &gt;
+    
+        &lt;img src=&#34;http://docker-saigon.github.io/img/caveat/caveat14.png&#34; alt=&#34;Scalable Apps&#34; /&gt;
+    
+    
+&lt;/figure&gt;
+
+
+&lt;p&gt;Scalability in your App is still up to you and will require you to explore the scenarios enabled by Containers.&lt;/p&gt;
+
+&lt;p&gt;The concept of Container &lt;a href=&#34;http://kubernetes.io/docs/user-guide/pods/&#34;&gt;Pods&lt;/a&gt; encourage the decomposition of applications into even smaller modular, focused, cooperating containers. The isolation provided by containers are sufficient to allow the design of reusable components which lead to more reliable, more scalable and faster to build services than applications built from monolithic containers. We believe these concepts require a change in mindset of what it means to build applications for the cloud. Read more about: &lt;a href=&#34;http://blog.kubernetes.io/2015/06/the-distributed-system-toolkit-patterns.html&#34;&gt;Patterns for Composite Containers&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;But even for existing legacy applications, which may be less &amp;ldquo;CloudNative&amp;rdquo;, containers enable powerfull deployment patterns such as &lt;a href=&#34;https://www.joyent.com/blog/dbaas-simplicity-no-lock-in&#34;&gt;The autopilot pattern&lt;/a&gt; pioneered by Joyent.&lt;/p&gt;
+
+&lt;h2 id=&#34;microsoft:4c461b6a7a614440939d8002a0e574c8&#34;&gt;Microsoft&lt;/h2&gt;
+
+&lt;p&gt;
+&lt;figure &gt;
+    
+        &lt;img src=&#34;http://docker-saigon.github.io/img/caveat/caveat10.png&#34; alt=&#34;Microsoft Containers&#34; /&gt;
+    
+    
+&lt;/figure&gt;
+&lt;/p&gt;
+
+&lt;p&gt;Microsoft committed early on to supporting the Docker API for Windows containers with Windows Server 2016. After contributing to ensure the Docker client tools worked well on Windows, implementing Filesystem and Container fundamentals in the Windows Kernel and even open sourcing the Dot Net Core CLR.&lt;/p&gt;
+
+&lt;p&gt;
+&lt;figure &gt;
+    
+        &lt;img src=&#34;http://docker-saigon.github.io/img/caveat/caveat11.png&#34; alt=&#34;Microsoft Containers&#34; /&gt;
+    
+    
+&lt;/figure&gt;
+&lt;/p&gt;
+
+&lt;p&gt;Microsoft seems to have gone full-out by extending Project Astoria (an Android emulator) into an impressive Windows SubSystem for Linux (WSL) announced just last week and surprising everyone.&lt;/p&gt;
+
+&lt;p&gt;
+&lt;figure &gt;
+    
+        &lt;img src=&#34;http://docker-saigon.github.io/img/caveat/caveat12.png&#34; alt=&#34;Bash on Windows&#34; /&gt;
+    
+    
+&lt;/figure&gt;
+&lt;/p&gt;
+
+&lt;p&gt;The current Linux Kernel API features integrated with Windows however, are targeted at the most common Linux system calls and just enough to &lt;a href=&#34;http://arstechnica.com/information-technology/2016/04/why-microsoft-needed-to-make-windows-run-linux-software/&#34;&gt;make Windows a more attractive platform for software development&lt;/a&gt; (at the moment).&lt;/p&gt;
+
+&lt;p&gt;Integrating these recent events into a wonderfully joyful way, our hats are off to the creator of this video!&lt;/p&gt;
+
+&lt;p&gt;Reference: &lt;a href=&#34;http://blog.takipi.com/ignore-the-hype-5-docker-misconceptions-java-developers-should-consider/&#34;&gt;Ignore the Hype&lt;/a&gt;&lt;/p&gt;
+</description>
+    </item>
+    
+  </channel>
+</rss>

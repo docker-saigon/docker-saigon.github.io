@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en-us">
+
+<head>
+
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="">
+    <meta name="author" content="">
+
+    <title>Docker Caveats -- Docker Saigon</title>
+
+    
+
+    
+    <link href="http://docker-saigon.github.io/css/bootstrap.min.css" rel="stylesheet">
+
+    
+    <link href="http://docker-saigon.github.io/css/clean-blog.min.css" rel="stylesheet">
+
+    
+    <link href="http://maxcdn.bootstrapcdn.com/font-awesome/4.1.0/css/font-awesome.min.css" rel="stylesheet" type="text/css">
+    <link href='http://fonts.googleapis.com/css?family=Lora:400,700,400italic,700italic' rel='stylesheet' type='text/css'>
+    <link href='http://fonts.googleapis.com/css?family=Open+Sans:300italic,400italic,600italic,700italic,800italic,400,300,600,700,800' rel='stylesheet' type='text/css'>
+
+    
+    
+    
+
+</head>
+
+<body>
+
+    
+    <nav class="navbar navbar-default navbar-custom navbar-fixed-top">
+        <div class="container-fluid">
+            
+            <div class="navbar-header page-scroll">
+                <button type="button" class="navbar-toggle" data-toggle="collapse" data-target="#bs-example-navbar-collapse-1">
+                    <span class="sr-only">Toggle navigation</span>
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                </button>
+                <a class="navbar-brand" href="http://docker-saigon.github.io/">Docker Saigon</a>
+            </div>
+
+                       
+            <div class="collapse navbar-collapse" id="bs-example-navbar-collapse-1">
+                <ul class="nav navbar-nav navbar-right">
+                    
+                    <li>
+                        <a href="http://docker-saigon.github.io/">home</a>
+                    </li>
+                    
+                    <li>
+                        <a href="http://docker-saigon.github.io/about/">about</a>
+                    </li>
+                    
+                    <li>
+                        <a href="http://docker-saigon.github.io/post/">Archive</a>
+                    </li>
+                    
+                    <li>
+                        <a href="http://docker-saigon.github.io/contact/">contact</a>
+                    </li>
+                    
+                  </ul>
+            </div>
+           
+
+        </div>
+        
+    </nav>
+
+
+    
+    
+    <header class="intro-header" style="background-image: url('http://docker-saigon.github.io//img/fine-print.png')">
+      
+      <div class="container">
+        <div class="row">
+           <div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+             <div class="post-heading">
+               <h1>Docker Caveats</h1>
+               <h2 class="subheading">What You Should Know About Running Docker In Production</h2>
+               <span class="meta">Posted by <a href="#">Docker Saigon</a> on Mon, Apr 11, 2016
+                 <br />
+                 In <a href="http://docker-saigon.github.io/categories/production" >Production</a>, 
+
+                 <br />
+                 Tags <a href="http://docker-saigon.github.io/tags/docker" >docker</a> <a href="http://docker-saigon.github.io/tags/production" >production</a> 
+
+               </span>
+             </div>
+           </div>
+        </div>
+      </div>
+    </header>
+
+    
+    <article>
+        <div class="container">
+            <div class="row">
+                <div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+                  
+
+<p>We can&rsquo;t deny Linux Containers are a very powerful concept combining clever Linux kernel features and Docker&rsquo;s open source tools make containers easily accessible to developers of any background.</p>
+
+<p>At container summit 2016, <a href="https://twitter.com/bcantrill">Bryan Cantrill</a> eloquently compared the industry disruption this causes, and the issues mass industry adoption entails, to the issues which may show up after <a href="http://containersummit.io/events/nyc-2016/videos/the-evolving-container-ecosystem">you&rsquo;ve taught peasants to read</a> <em>(about 28 minutes into the linked video of the panel discussion).</em></p>
+
+<p>Issues such as: improper usage of the technology and unpleasant surprises due to a poor understanding of the underlying features enabling the technology.</p>
+
+<p>Yesterday, a brilliant Downfall parody made by <a href="https://twitter.com/nukemberg">Avishai Ish-Shalom</a> highlights some of the surprises &amp; frustrations which may cause shock to those that are unprepared:</p>
+
+<blockquote class="twitter-tweet"><p lang="en" dir="ltr">This is hilarious! Hitler uses Docker <a href="https://t.co/cmXB2Clj8D">https://t.co/cmXB2Clj8D</a> <br><br>via <a href="https://twitter.com/nukemberg">@nukemberg</a> ht <a href="https://twitter.com/m1keil">@m1keil</a>  <a href="https://twitter.com/hashtag/linux?src=hash">#linux</a> <a href="https://twitter.com/hashtag/cloudcomputing?src=hash">#cloudcomputing</a> <a href="https://twitter.com/hashtag/devops?src=hash">#devops</a> <a href="https://twitter.com/hashtag/sysadmin?src=hash">#sysadmin</a></p>&mdash; nixCraft (@nixcraft) <a href="https://twitter.com/nixcraft/status/719146833558183936">April 10, 2016</a></blockquote>
+<script async src="//platform.twitter.com/widgets.js" charset="utf-8"></script>
+
+<p>In this blog post, we&rsquo;d like to take a look at each of these statements and deconstruct them for a better understanding of what makes this short so clever, while at the same time - it serves as a great caveat for anyone hoping to get the best out of running Docker in production.</p>
+
+<h2 id="isolation:4c461b6a7a614440939d8002a0e574c8">Isolation</h2>
+
+<p>The video starts with what looks like a very popular CI/CD setup using Docker&rsquo;s public image registry, the Docker Hub and its multi-container management tool, Docker-Compose. Although it should be noted that Docker-Compose is still primarily aimed at Development and Testing environments and is probably not suited for larger production deployments, as clearly outlined in the <a href="https://docs.docker.com/compose/production/">Docker docs</a> at the time of this blog post.</p>
+
+
+<figure >
+    
+        <img src="http://docker-saigon.github.io/img/caveat/caveat01.png" alt="Untrusted Images" />
+    
+    
+</figure>
+
+
+
+<figure >
+    
+        <img src="http://docker-saigon.github.io/img/caveat/caveat02.png" alt="Kernel Panic in a Shared Kernel" />
+    
+    
+</figure>
+
+
+<p><strong>This highlights a first issue of sharing the kernel: reduced reliability and redundancy.</strong></p>
+
+
+<figure >
+    
+        <img src="http://docker-saigon.github.io/img/caveat/caveat03.png" alt="Isolation my ass!" />
+    
+    
+</figure>
+
+
+<p>We believe, the take-away here should be:</p>
+
+<blockquote>
+<p>Containers should not be used without ensuring that reliability and redundancy of every resource is incorporated into the overall design of your infrastructure.</p>
+</blockquote>
+
+<p>You may gain back reliability by using shared storage, service orchestration, monitoring and a framework with built-in self-healing features such as <a href="http://container-solutions.com/rescheduling-containers-on-node-failures-with-docker-swarm-1-1/">the container rescheduling on node failure&rdquo;  features added to Swarm</a>; Or the ingrained concept of &ldquo;The Reconciliation Loop&rdquo; in <a href="http://kubernetes.io/docs/user-guide/replicasets/">Kubernetes ReplicaSets</a>.</p>
+
+<p>Although a snarky comment on the above is also included in the video:</p>
+
+
+<figure >
+    
+        <img src="http://docker-saigon.github.io/img/caveat/caveat09.png" alt="Keep it Simple, Stupid" />
+    
+    
+    <figcaption>
+        <p>
+        
+        <a href="https://twitter.com/hashtag/GIFEE"> 
+            #GIFEE
+        </a> 
+        </p> 
+    </figcaption>
+    
+</figure>
+
+
+<p>Later on, another concern related to the implementation of isolation provided by container runtimes is also highlighted:</p>
+
+
+<figure >
+    
+        <img src="http://docker-saigon.github.io/img/caveat/caveat08.png" alt="Resource Isolation in a Shared Kernel" />
+    
+    
+</figure>
+
+
+<p>Disillusionment comes from treating Docker like magic.</p>
+
+<p>Covered in detail by <a href="https://www.youtube.com/watch?v=sK5i-N34im8">Jérôme Petazzoni in his DockerCon EU 2015 presentation</a>, control groups are integral to what makes up a linux container and fundamental to the resource usage control per process group. A fix for the above complaint is added to Docker 1.11, details can be found in the below Twitter conversation between the video creator and Docker maintainer <a href="https://github.com/jfrazelle">@jfrazelle</a>:</p>
+
+<blockquote class="twitter-tweet"><p lang="en" dir="ltr"><a href="https://twitter.com/frazelledazzell">@frazelledazzell</a> <a href="https://twitter.com/francesc">@francesc</a> <a href="https://twitter.com/nixcraft">@nixcraft</a> <a href="https://twitter.com/m1keil">@m1keil</a>  nproc cgroup support will only be in 1.11.0<a href="https://t.co/lCKjdNmx5Y">https://t.co/lCKjdNmx5Y</a></p>&mdash; Avishai Ish-Shalom (@nukemberg) <a href="https://twitter.com/nukemberg/status/719326696084606978">April 11, 2016</a></blockquote>
+<script async src="//platform.twitter.com/widgets.js" charset="utf-8"></script>
+
+<p>Care is also required surrounding entropy depletion in cloud environments, which is certainly very relevant in shared-kernel scenarios and we may refer to <a href="https://github.com/gesellix/haveged">HAVEGED</a> as a work-around for this.</p>
+
+<h2 id="image-security:4c461b6a7a614440939d8002a0e574c8">Image Security</h2>
+
+<p>The 2nd issue highlighted above was the mis-placed trust in container images pulled from public registries.</p>
+
+
+<figure >
+    
+        <img src="http://docker-saigon.github.io/img/caveat/caveat04.png" alt="Untrusted Images" />
+    
+    
+</figure>
+
+
+<p>The very apt &ldquo;<a href="http://sobersecurity.blogspot.com.ee/2016/03/containers-are-like-sandwiches.html">Sandwich Analogy</a>&rdquo; does a great job explaining why using non-official public images from the Docker Hub should be a concern.</p>
+
+<blockquote>
+<p>Let&rsquo;s think about Containers in the context of Sandwiches. You can pick up a sandwich. You can look at it, you can tell basically what&rsquo;s going on inside. Are there tomatoes? Lettuce? Ham? Turkey? It&rsquo;s not that hard. There can be things hiding, but for the most part you can get the big details. This is just like a container. Fedora? Red Hat? Ubuntu? It has httpd, great. What about a shell? systemd? Cool. There can be scary bits hidden in there too. Someone decided to replace /bin/sh with a python script? That&rsquo;s just like hiding the olives under the lettuce. What sort of monster would do such a thing!</p>
+</blockquote>
+
+<p>The security of image contents was big in the news all of 2014 &amp; 2015. Docker has been working diligently to add the required building blocks to fill the gaps. <a href="https://docs.docker.com/engine/userguide/storagedriver/imagesandcontainers/#content-addressable-storage">Content Addressable image layers</a> to verify image content against signed manifests, Registry repositories with proper pull validation no longer requiring Image IDs to be treated as secrets, <a href="https://blog.docker.com/2015/11/dockercon-eu-2015-docker-universal-control-plane/">Nautilus deep inspections</a> on the hub ensuring exposed vulnerabilities are patched in the <strong>official</strong> public Images, <a href="https://blog.docker.com/2016/02/docker-engine-1-10-security/">User Namespaces, Seccomp and AppArmor profiles</a> as well as <a href="https://blog.docker.com/2015/12/docker-webinar-qa-intro-to-docker-security/">other Security additions</a> to the Docker Engine, &hellip;.</p>
+
+<p>Refer also to the <a href="https://docs.docker.com/engine/security/">Docker docs</a> and <a href="https://www.docker.com/docker-security">the Docker Security Portal</a>.</p>
+
+<h2 id="docker-defaults:4c461b6a7a614440939d8002a0e574c8">Docker Defaults</h2>
+
+<p>As highlighted in our <a href="http://docker-saigon.github.io/post/Docker-Internals/">Docker Internals</a> blog post, if your Linux Kernel &gt; 2.6.x - you need to disable the <code>userland-proxy</code> on the Docker daemon in favor of Hairpin NAT!</p>
+
+
+<figure >
+    
+        <img src="http://docker-saigon.github.io/img/caveat/caveat13.png" alt="docker-proxy" />
+    
+    
+</figure>
+
+
+<p>In general, careful study of the docker defaults is required to ensure the optimal configuration for your environment and use-case. Things such as selecting the appropriate Copy-on-Write Filesystem are all covered in the Docker docs.</p>
+
+<h2 id="containers-vs-vms:4c461b6a7a614440939d8002a0e574c8">Containers vs VMs</h2>
+
+<p>Containers provide significant advantages over Virtual Machines for the use of &ldquo;Application Packaging&rdquo; due to the fact that they take a short time to build, are moved around easily and can start and stop very quickly compared to VMs.</p>
+
+
+<figure >
+    
+        <img src="http://docker-saigon.github.io/img/caveat/caveat05.png" alt="Inception" />
+    
+    
+</figure>
+
+
+<p>Unfortunately, in Windows &amp; OSX - virtualisation is required to run the Linux kernel and work with Linux containers. If this is not fully understood, this may cause frustration.</p>
+
+<p>Docker is also improving this with the newest Docker client (which is in private beta at the time of writing). The approach used by the newer Docker clients integrates more deeply with the host operating system which greatly streamlines the developer experience on non-Linux operating systems.</p>
+
+<h2 id="distribution-deployment:4c461b6a7a614440939d8002a0e574c8">Distribution &amp; Deployment</h2>
+
+<p>The Docker tools not only popularized Container technology, they also included critical shipping functionality making Containers an increasingly popular way to package and deploy code. Container images solve many real-world problems with existing packaging and deployment tools.</p>
+
+
+<figure >
+    
+        <img src="http://docker-saigon.github.io/img/caveat/caveat06.png" alt="Bloated Images" />
+    
+    
+</figure>
+
+
+
+<figure >
+    
+        <img src="http://docker-saigon.github.io/img/caveat/caveat07.png" alt="Use Package Managers" />
+    
+    
+</figure>
+
+
+<p>However, as containers were being adopted by the masses without differentiating them from the way Virtual Machines tend to be used, images were often shipped with full Linux distributions and countless unnecessary binaries packaged within. This does not only bloat the images, causing slow deployment times, but also increases the attack surface for the application running in production.</p>
+
+<p>Luckily the community has been adopting slim <code>Application containers</code>, using minimal Linux distributions such as Alpine - which is now being <a href="https://news.ycombinator.com/item?id=11000378">used for all the Official docker images</a> and statically compiled binaries that only rely on the kernel they are built for.</p>
+
+
+<figure >
+    
+        <img src="http://docker-saigon.github.io/img/caveat/caveat14.png" alt="Scalable Apps" />
+    
+    
+</figure>
+
+
+<p>Scalability in your App is still up to you and will require you to explore the scenarios enabled by Containers.</p>
+
+<p>The concept of Container <a href="http://kubernetes.io/docs/user-guide/pods/">Pods</a> encourage the decomposition of applications into even smaller modular, focused, cooperating containers. The isolation provided by containers are sufficient to allow the design of reusable components which lead to more reliable, more scalable and faster to build services than applications built from monolithic containers. We believe these concepts require a change in mindset of what it means to build applications for the cloud. Read more about: <a href="http://blog.kubernetes.io/2015/06/the-distributed-system-toolkit-patterns.html">Patterns for Composite Containers</a>.</p>
+
+<p>But even for existing legacy applications, which may be less &ldquo;CloudNative&rdquo;, containers enable powerfull deployment patterns such as <a href="https://www.joyent.com/blog/dbaas-simplicity-no-lock-in">The autopilot pattern</a> pioneered by Joyent.</p>
+
+<h2 id="microsoft:4c461b6a7a614440939d8002a0e574c8">Microsoft</h2>
+
+<p>
+<figure >
+    
+        <img src="http://docker-saigon.github.io/img/caveat/caveat10.png" alt="Microsoft Containers" />
+    
+    
+</figure>
+</p>
+
+<p>Microsoft committed early on to supporting the Docker API for Windows containers with Windows Server 2016. After contributing to ensure the Docker client tools worked well on Windows, implementing Filesystem and Container fundamentals in the Windows Kernel and even open sourcing the Dot Net Core CLR.</p>
+
+<p>
+<figure >
+    
+        <img src="http://docker-saigon.github.io/img/caveat/caveat11.png" alt="Microsoft Containers" />
+    
+    
+</figure>
+</p>
+
+<p>Microsoft seems to have gone full-out by extending Project Astoria (an Android emulator) into an impressive Windows SubSystem for Linux (WSL) announced just last week and surprising everyone.</p>
+
+<p>
+<figure >
+    
+        <img src="http://docker-saigon.github.io/img/caveat/caveat12.png" alt="Bash on Windows" />
+    
+    
+</figure>
+</p>
+
+<p>The current Linux Kernel API features integrated with Windows however, are targeted at the most common Linux system calls and just enough to <a href="http://arstechnica.com/information-technology/2016/04/why-microsoft-needed-to-make-windows-run-linux-software/">make Windows a more attractive platform for software development</a> (at the moment).</p>
+
+<p>Integrating these recent events into a wonderfully joyful way, our hats are off to the creator of this video!</p>
+
+<p>Reference: <a href="http://blog.takipi.com/ignore-the-hype-5-docker-misconceptions-java-developers-should-consider/">Ignore the Hype</a></p>
+
+                </div>
+            </div>
+        </div>
+    </article>
+
+    <hr>
+    
+    <footer>
+        <div class="container">
+            <div class="row">
+                <div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+                  <ul class="list-inline text-center">
+                    <li>
+                      <a href="mailto:docker-saigon@gmail.com">
+                        <span class="fa-stack fa-lg">
+                          <i class="fa fa-circle fa-stack-2x"></i>
+                          <i class="fa fa-envelope-o fa-stack-1x fa-inverse"></i>
+                        </span>
+                      </a>
+                    </li>
+                    
+                    <li>
+                      <a href="https://twitter.com/docker_saigon">
+                        <span class="fa-stack fa-lg">
+                          <i class="fa fa-circle fa-stack-2x"></i>
+                          <i class="fa fa-twitter fa-stack-1x fa-inverse"></i>
+                        </span>
+                      </a>
+                    </li>
+                    
+                    <li>
+                      <a href="https://www.youtube.com/channel/UC1t_GbTJudAAK9Wqkg6-uLw">
+                        <span class="fa-stack fa-lg">
+                          <i class="fa fa-circle fa-stack-2x"></i>
+                          <i class="fa fa-youtube fa-stack-1x fa-inverse"></i>
+                        </span>
+                      </a>
+                    </li>
+                    
+                    <li>
+                      <a href="https://github.com/docker-saigon">
+                        <span class="fa-stack fa-lg">
+                          <i class="fa fa-circle fa-stack-2x"></i>
+                          <i class="fa fa-github fa-stack-1x fa-inverse"></i>
+                        </span>
+                      </a>
+                    </li>
+                    
+                    <li>
+                      <a href="https://www.facebook.com/DockerSaigon">
+                        <span class="fa-stack fa-lg">
+                          <i class="fa fa-circle fa-stack-2x"></i>
+                          <i class="fa fa-facebook fa-stack-1x fa-inverse"></i>
+                        </span>
+                      </a>
+                    </li>
+                    
+                  </ul>
+                  <p class="copyright text-muted">Code released under the Apache 2.0 license.</p>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    
+    <script src="http://docker-saigon.github.io/js/jquery.min.js"></script>
+
+    
+    <script src="http://docker-saigon.github.io/js/bootstrap.min.js"></script>
+
+    
+    <script src="http://docker-saigon.github.io/js/clean-blog.js"></script>
+
+    
+<script>
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+    (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+    m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+  ga('create', 'UA-69412248-1', 'auto');
+  ga('send', 'pageview');
+</script>
+
+
+</body>
+
+</html>
+
