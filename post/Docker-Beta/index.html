@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en-us">
+
+<head>
+
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="">
+    <meta name="author" content="">
+
+    <title>Docker For Windows Beta -- Docker Saigon</title>
+
+    
+
+    
+    <link href="http://docker-saigon.github.io/css/bootstrap.min.css" rel="stylesheet">
+
+    
+    <link href="http://docker-saigon.github.io/css/clean-blog.min.css" rel="stylesheet">
+
+    
+    <link href="http://maxcdn.bootstrapcdn.com/font-awesome/4.1.0/css/font-awesome.min.css" rel="stylesheet" type="text/css">
+    <link href='http://fonts.googleapis.com/css?family=Lora:400,700,400italic,700italic' rel='stylesheet' type='text/css'>
+    <link href='http://fonts.googleapis.com/css?family=Open+Sans:300italic,400italic,600italic,700italic,800italic,400,300,600,700,800' rel='stylesheet' type='text/css'>
+
+    
+    
+    
+
+</head>
+
+<body>
+
+    
+    <nav class="navbar navbar-default navbar-custom navbar-fixed-top">
+        <div class="container-fluid">
+            
+            <div class="navbar-header page-scroll">
+                <button type="button" class="navbar-toggle" data-toggle="collapse" data-target="#bs-example-navbar-collapse-1">
+                    <span class="sr-only">Toggle navigation</span>
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                </button>
+                <a class="navbar-brand" href="http://docker-saigon.github.io/">Docker Saigon</a>
+            </div>
+
+                       
+            <div class="collapse navbar-collapse" id="bs-example-navbar-collapse-1">
+                <ul class="nav navbar-nav navbar-right">
+                    
+                    <li>
+                        <a href="http://docker-saigon.github.io/">home</a>
+                    </li>
+                    
+                    <li>
+                        <a href="http://docker-saigon.github.io/about/">about</a>
+                    </li>
+                    
+                    <li>
+                        <a href="http://docker-saigon.github.io/post/">Archive</a>
+                    </li>
+                    
+                    <li>
+                        <a href="http://docker-saigon.github.io/contact/">contact</a>
+                    </li>
+                    
+                  </ul>
+            </div>
+           
+
+        </div>
+        
+    </nav>
+
+
+    
+    
+    <header class="intro-header" style="background-image: url('http://docker-saigon.github.io//img/fine-print.png')">
+      
+      <div class="container">
+        <div class="row">
+           <div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+             <div class="post-heading">
+               <h1>Docker For Windows Beta</h1>
+               <h2 class="subheading">We&#39;Ve Been Playing With The Docker Beta For Windows, Here Are Our Findings</h2>
+               <span class="meta">Posted by <a href="#">Docker Saigon</a> on Mon, Apr 18, 2016
+                 <br />
+                 In <a href="http://docker-saigon.github.io/categories/windows" >Windows</a>, 
+
+                 <br />
+                 Tags <a href="http://docker-saigon.github.io/tags/docker" >docker</a> <a href="http://docker-saigon.github.io/tags/windows" >windows</a> 
+
+               </span>
+             </div>
+           </div>
+        </div>
+      </div>
+    </header>
+
+    
+    <article>
+        <div class="container">
+            <div class="row">
+                <div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+                  
+
+<p><strong>Note</strong>: The research for this post was done on a Beta client and technical details are subject to change.</p>
+
+<p>As indicated in previous posts, we&rsquo;ve been using Docker on Windows with Hyper-V for a while. Hearing that the new Docker client for Windows would be Alpine-based and focused on Hyper-V made us eager to see for ourselves.</p>
+
+<h2 id="hyper-v-configuration:ebf9573d6838c40027746e9d7482622a">Hyper-V configuration</h2>
+
+<p>The first issue to overcome when using Hyper-V on Windows is the lack of DNS/DHCP &amp; NAT services. The new Docker client handles the Virtual Switch NAT configuration for us and adds a clever solution for DNS &amp; DHCP.</p>
+
+<p>As part of the installation process a <code>DockerNAT</code> Internal Virtual Switch is created and the Virtual Interface on the Windows host for this switch gets a static IP:</p>
+
+<pre><code>New-VMSwitch -Name &quot;DockerNAT&quot; -SwitchType Internal
+Get-NetAdapter &quot;vEthernet (DockerNAT)&quot; | New-NetIPAddress -AddressFamily IPv4 `
+      -IPAddress &quot;10.0.75.1&quot; -PrefixLength 24
+</code></pre>
+
+<p>A NAT object is created to handle Network Address Translation for the &ldquo;10.0.75.0/24&rdquo; subnet:</p>
+
+<pre><code>New-NetNat –Name $SwitchName `
+	–InternalIPInterfaceAddressPrefix &quot;10.0.75.0/24&quot;
+</code></pre>
+
+<p><strong>Tip</strong>: If any of these steps failed, ensure a Switch with the name &ldquo;DockerNAT&rdquo; was created, the IP was assigned to the Virtual Interface and that <code>Get-NetNat</code> lists a NAT with the correct subnet. Also ensure these hard-coded subnets do not overlap with already existing interfaces (We had to manually fix these things while testing the beta).</p>
+
+<p>Next, the <code>MobyLinuxVM</code> Virtual Machine is created in Hyper-V. MobyLinuxVM uses an Alpine bootcd which has Hyper-V Integration Services, such as the <code>Key-Value Pair Exchange</code> service (hv_kvp_daemon). The Hyper-V KVP Daemon allows communication between the Hyper-V Host and the Linux Guest (i.e to retrieve the Guest IP and send two-way messages as we&rsquo;ll see later).</p>
+
+<p>Finally, Docker bundles a <code>com.docker.proxy.exe</code> binary which proxies the ports from the MobyLinuxVM on your windows host. At the time of writing (Docker Beta 7), this includes the DNS (port 53 TPC/UDP), DHCP (port 67 UDP) and Docker daemon (port 2375 TCP).</p>
+
+<p>If you&rsquo;ve been running alternative solutions for your Hyper-V set-up, you need to ensure the above ports are available as follows..</p>
+
+<p>See if any process is using port 53:</p>
+
+<pre><code>netstat -aon | findstr :53 
+</code></pre>
+
+<p>Once you have the process id (<code>&lt;pid&gt;</code>) of the process holding the port, get the name:</p>
+
+<pre><code>tasklist /SVC | findstr &lt;pid&gt;
+</code></pre>
+
+<p>The <code>com.docker.proxy.exe</code> will proxy all DNS requests from the internal network of your Windows laptop to the DNS server used by your Windows host, effectively isolating the MobyLinuxVM from the network configuration changes as you move your laptop around.</p>
+
+<p>To ensure this process can work properly, docker automatically creates <code>DockerTcp</code> &amp; <code>DockerUdp</code> firewall rules and removes them when you close the client.</p>
+
+<pre><code>New-NetFirewallRule -Name &quot;DockerTcp&quot; -DisplayName &quot;DockerTcp&quot;  `
+   -Program &quot;C:\&lt;path&gt;\&lt;to&gt;\com.docker.proxy.exe&quot; -Protocol TCP `
+   -Profile Any -EdgeTraversalPolicy DeferToUser -Enabled True
+
+New-NetFirewallRule -Name &quot;DockerUdp&quot; -DisplayName &quot;DockerUdp&quot;  `
+   -Program &quot;C:\&lt;path&gt;\&lt;to&gt;\com.docker.proxy.exe&quot; -Protocol UDP `
+   -Profile Any -EdgeTraversalPolicy DeferToUser -Enabled True
+</code></pre>
+
+<p>Having the Docker daemon port opened locally, allows your docker client to talk to localhost, however - it seems that going forward a named pipe solution will be used instead, if the VM was created successfully you should see the named pipe connected to its COM port:</p>
+
+<pre><code>Get-VMComPort -VMName MobyLinuxVM | fl | Out-String
+</code></pre>
+
+<p>See also the docker client code for handling <a href="https://github.com/docker/docker/blob/v1.11.0/vendor/src/github.com/docker/go-connections/sockets/sockets_windows.go">Windows Named Pipes</a> going forward.</p>
+
+<p>If the MobyLinuxVM booted successfully, we may confirm the Hyper-V integration Services are running:</p>
+
+<pre><code>Get-VMIntegrationService -VMName MobyLinuxVM -Name &quot;Key-Value Pair Exchange&quot;
+</code></pre>
+
+<p>And that the <code>com.docker.proxy.exe</code> DHCP service provided an IP to the VM - which we can query thanks to the Hyper-V Integration Services:</p>
+
+<pre><code>$(Get-VM MobyLinuxVM).NetworkAdapters[0]
+</code></pre>
+
+<h2 id="troubleshooting:ebf9573d6838c40027746e9d7482622a">Troubleshooting</h2>
+
+<p>All settings are stored under <code>%APPDATA%\Docker\</code> folder, this folder is replicated across machines in an Enterprise setting where Roaming is enabled.</p>
+
+<p>All logs are stored under <code>%LOCALAPPDATA%\Docker\</code> folder.</p>
+
+<p>To monitor the latest logs use the following PowerShell command:</p>
+
+<pre><code>gc $(gi $env:LocalAppData\Docker\* | sort LastAccessTime -Desc | select -First 1) -Wait
+</code></pre>
+
+<p>This will auto-refresh for every event written to the log.</p>
+
+<h2 id="docker-toolbox-migration:ebf9573d6838c40027746e9d7482622a">Docker ToolBox Migration</h2>
+
+<p>Switching on the Hyper-V role on Windows will disable VirtualBox (and you won&rsquo;t be able to use the Docker ToolBox until you switch Hyper-V off &amp; reboot). If a Docker Toolbox installation is detected, a migration path is offered (using <code>qemu-img</code>). This will convert the <code>%USERPROFILE%\.docker\machine\machines\&lt;machine-name&gt;\disk.vmdk</code> to vhdx:</p>
+
+<pre><code>qemu-img.exe convert &lt;path-to-vmdk&gt; -O vhdx -o subformat=dynamic -p &quot;C:\Users\Public\Documents\Hyper-V\Virtual hard disks\MobyLinuxVM.vhdx\&quot;
+</code></pre>
+
+<p>If you were already using Docker-Machine &amp; Docker-Compose with Hyper-V, you can continue to do so side-by-side with the Docker for Windows client.</p>
+
+<h2 id="mounting-volumes:ebf9573d6838c40027746e9d7482622a">Mounting Volumes</h2>
+
+<p>One of the big improvements the new Docker for Windows promises is how Volume mounts will be handled.</p>
+
+<p>A handy dialog is provided to streamline everything for us.</p>
+
+
+<figure >
+    
+        <img src="http://docker-saigon.github.io/img/beta7-shares.png" alt="shares dialog" />
+    
+    
+</figure>
+
+
+<p>The current implementation will share the whole drive (and not individual folders). Enabling a Drive share will prompt for credentials.</p>
+
+<p>Credentials are stored with the <code>target</code> &ldquo;Docker Host Filesystem Access&rdquo; under the Windows &gt; Control Panel &gt; Credential Manager &gt; Windows Credentials Store by the configuration tool. This uses <code>System.Security.Cryptography</code> to encrypt the credentials with currentuser scope.</p>
+
+<p>If the credential manager already contains credentials for the specified target, they will be overwritten.</p>
+
+<p>Next, the drive is shared on the Windows Host:</p>
+
+<pre><code>net share C=C:\ /grant:&lt;username&gt;,FULL /CACHE:None
+</code></pre>
+
+<p>This Samba share now needs to be mounted into the MobyLinuxVM and this is automated through the Hyper-V <a href="https://technet.microsoft.com/en-us/library/dn798287.aspx">Key-Value Pair Exchange</a> Integration Service. A detailed explanation is available <a href="http://dlafferty.blogspot.com.ee/2013/09/hyper-v-kvp-data-exchange-for-cloudstack.html">here</a>.</p>
+
+<p>The way this is supposed to work is as follows: our Windows host puts a <code>mount authentication token</code> packaged in a <code>KvpExchangeDataItem</code> on the VMBus:</p>
+
+<pre><code>class Msvm_KvpExchangeDataItem : CIM_ManagedElement
+{
+  uint16 Source = 0;
+  string Name = &quot;cifsmount&quot;;
+  string Data = &quot;authToken&quot;;
+};
+</code></pre>
+
+<p>The Authentication token is a serialized string containing the mount points and mount options:</p>
+
+<pre><code>/c;/C;username=&lt;username&gt;,password=&lt;password&gt;,noperm
+</code></pre>
+
+<p>On the Alpine guest the <code>hv_utils</code> kernel driver module notifies the <code>hv_kvp_daemon</code>. This daemon writes the kvp to the pool file (<code>/var/lib/hyperv/.kv_pool_*</code>).</p>
+
+<p>At this stage a process on MobyLinuxVM needs to make the directory and mount the share from the host - but this was failing at the time of writing:</p>
+
+<pre><code> #for both upper and lower case
+mount -t cifs //10.0.75.1/C /C -o username=&lt;username&gt;,password=&lt;password&gt;,noperm
+</code></pre>
+
+<p>If the share worked fine, our docker client would be sending any volume mount commands through the socket opened by the <code>com.docker.proxy.exe</code>, this proxy re-writes the path if needed: <code>C:\Users\test\</code> becomes <code>/C/Users/test</code>, allowing us to mount Windows folders into our Docker containers.</p>
+
+<p>However, there are still limitations due to the SMB protocol (lack of support for inotify and symlinks), which will cause problems with live reloads.</p>
+
+<p><strong>Troubleshooting</strong>: We can verify that the auth token exists on the VMBus with the following PowerShell script:</p>
+
+<pre><code>$VmMgmt = Get-WmiObject -Namespace root\virtualization\v2 -Class ` 
+    Msvm_VirtualSystemManagementService
+$vm = Get-WmiObject -Namespace root\virtualization\v2 -Class ` 
+    Msvm_ComputerSystem -Filter {ElementName='MobyLinuxVM'}
+
+($vm.GetRelated(&quot;Msvm_KvpExchangeComponent&quot;)[0] ` 
+    ).GetRelated(&quot;Msvm_KvpExchangeComponentSettingData&quot;).HostExchangeItems | % { ` 
+        $GuestExchangeItemXml = ([XML]$_).SelectSingleNode(` 
+            &quot;/INSTANCE/PROPERTY[@NAME='Name']/VALUE[child::text() = 'cifsmount']&quot;) 
+
+        if ($GuestExchangeItemXml -ne $null) 
+        { 
+           $GuestExchangeItemXml.SelectSingleNode(` 
+            &quot;/INSTANCE/PROPERTY[@NAME='Data']/VALUE/child::text()&quot;).Value 
+        }    
+    } 
+
+</code></pre>
+
+<p>So far, I have not been able to find which process is monitoring the <code>/var/lib/hyperv/.kv_pool_0</code> files on the Alpine guest.</p>
+
+<h2 id="private-registries:ebf9573d6838c40027746e9d7482622a">Private Registries</h2>
+
+<p>At the moment, the beta for Windows does not support <code>DOCKER_OPTS</code> or TLS certs <strong>yet</strong>.</p>
+
+<p>We can get root access to the MobyLinuxVM as follows:</p>
+
+<pre><code> #get a privileged container with access to Docker daemon
+docker run --privileged -it --rm -v /var/run/docker.sock:/var/run/docker.sock -v /usr/bin/docker:/usr/bin/docker alpine sh
+
+ #run a container with full root access to MobyLinuxVM and no seccomp profile (so you can mount stuff)
+docker run --net=host --ipc=host --uts=host --pid=host -it --security-opt=seccomp=unconfined --privileged --rm -v /:/host alpine /bin/sh
+
+ #switch to host FS
+chroot /host
+</code></pre>
+
+<p>Poking around in the VM reveals the following:</p>
+
+<p>The VM (Alpine-based) uses <a href="http://wiki.alpinelinux.org/wiki/Alpine_Linux_Init_System">OpenRC as its init system</a>.</p>
+
+<pre><code>rc-status
+</code></pre>
+
+<p>Shows the status of all services, but some of the init scripts do not implement status and show up as &ldquo;crashed&rdquo; while it seems their process is still running (<code>ps -a</code>).</p>
+
+<p>The Docker init script relies on a <code>/usr/bin/mobyconfig</code> script. This <code>mobyconfig</code> script requires the kernel to boot with a <code>com.docker.database</code> label specifying the location of the config file or it bails. If the label is present - <code>/Database</code> is mounted using the <a href="https://en.wikipedia.org/wiki/9P_%28protocol%29">Plan 9 Filesystem Protocol</a>, which was the original filesystem for Docker for Mac.</p>
+
+<p>The <code>mobyconfig</code> script is able to retrieve network and <code>insecure-registry</code> configuration for the Docker deamon or pick up a config file from <code>/etc/docker/daemon.json</code>. This looks like a very promising solution, once it is fully implemented.</p>
+
+<p>As the whole disk is a Temporary filesystem with only the <code>/var/</code> mountpoint (to <code>/dev/sda2</code>) persisted, changes made to any of the scripts are not persisted across reboots. It is possible to temporarily change the Docker options and <code>/etc/init.d/docker restart</code> the daemon.</p>
+
+<h2 id="conclusion:ebf9573d6838c40027746e9d7482622a">Conclusion</h2>
+
+<p>Many improvements are coming with the Docker client for Windows, we are looking forward at testing the Docker client for Mac next.</p>
+
+                </div>
+            </div>
+        </div>
+    </article>
+
+    <hr>
+    
+    <footer>
+        <div class="container">
+            <div class="row">
+                <div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+                  <ul class="list-inline text-center">
+                    <li>
+                      <a href="mailto:docker-saigon@gmail.com">
+                        <span class="fa-stack fa-lg">
+                          <i class="fa fa-circle fa-stack-2x"></i>
+                          <i class="fa fa-envelope-o fa-stack-1x fa-inverse"></i>
+                        </span>
+                      </a>
+                    </li>
+                    
+                    <li>
+                      <a href="https://twitter.com/docker_saigon">
+                        <span class="fa-stack fa-lg">
+                          <i class="fa fa-circle fa-stack-2x"></i>
+                          <i class="fa fa-twitter fa-stack-1x fa-inverse"></i>
+                        </span>
+                      </a>
+                    </li>
+                    
+                    <li>
+                      <a href="https://www.youtube.com/channel/UC1t_GbTJudAAK9Wqkg6-uLw">
+                        <span class="fa-stack fa-lg">
+                          <i class="fa fa-circle fa-stack-2x"></i>
+                          <i class="fa fa-youtube fa-stack-1x fa-inverse"></i>
+                        </span>
+                      </a>
+                    </li>
+                    
+                    <li>
+                      <a href="https://github.com/docker-saigon">
+                        <span class="fa-stack fa-lg">
+                          <i class="fa fa-circle fa-stack-2x"></i>
+                          <i class="fa fa-github fa-stack-1x fa-inverse"></i>
+                        </span>
+                      </a>
+                    </li>
+                    
+                    <li>
+                      <a href="https://www.facebook.com/DockerSaigon">
+                        <span class="fa-stack fa-lg">
+                          <i class="fa fa-circle fa-stack-2x"></i>
+                          <i class="fa fa-facebook fa-stack-1x fa-inverse"></i>
+                        </span>
+                      </a>
+                    </li>
+                    
+                  </ul>
+                  <p class="copyright text-muted">Code released under the Apache 2.0 license.</p>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    
+    <script src="http://docker-saigon.github.io/js/jquery.min.js"></script>
+
+    
+    <script src="http://docker-saigon.github.io/js/bootstrap.min.js"></script>
+
+    
+    <script src="http://docker-saigon.github.io/js/clean-blog.js"></script>
+
+    
+<script>
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+    (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+    m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+  ga('create', 'UA-69412248-1', 'auto');
+  ga('send', 'pageview');
+</script>
+
+
+</body>
+
+</html>
+

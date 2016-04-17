@@ -7,8 +7,222 @@
     <generator>Hugo -- gohugo.io</generator>
     <language>en-us</language>
     <copyright>Code released under the Apache 2.0 license.</copyright>
-    <lastBuildDate>Mon, 11 Apr 2016 20:17:12 +0700</lastBuildDate>
+    <lastBuildDate>Mon, 18 Apr 2016 00:34:41 +0700</lastBuildDate>
     <atom:link href="http://docker-saigon.github.io/post/index.xml" rel="self" type="application/rss+xml" />
+    
+    <item>
+      <title>Docker For Windows Beta</title>
+      <link>http://docker-saigon.github.io/post/Docker-Beta/</link>
+      <pubDate>Mon, 18 Apr 2016 00:34:41 +0700</pubDate>
+      
+      <guid>http://docker-saigon.github.io/post/Docker-Beta/</guid>
+      <description>
+
+&lt;p&gt;&lt;strong&gt;Note&lt;/strong&gt;: The research for this post was done on a Beta client and technical details are subject to change.&lt;/p&gt;
+
+&lt;p&gt;As indicated in previous posts, we&amp;rsquo;ve been using Docker on Windows with Hyper-V for a while. Hearing that the new Docker client for Windows would be Alpine-based and focused on Hyper-V made us eager to see for ourselves.&lt;/p&gt;
+
+&lt;h2 id=&#34;hyper-v-configuration:ebf9573d6838c40027746e9d7482622a&#34;&gt;Hyper-V configuration&lt;/h2&gt;
+
+&lt;p&gt;The first issue to overcome when using Hyper-V on Windows is the lack of DNS/DHCP &amp;amp; NAT services. The new Docker client handles the Virtual Switch NAT configuration for us and adds a clever solution for DNS &amp;amp; DHCP.&lt;/p&gt;
+
+&lt;p&gt;As part of the installation process a &lt;code&gt;DockerNAT&lt;/code&gt; Internal Virtual Switch is created and the Virtual Interface on the Windows host for this switch gets a static IP:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;New-VMSwitch -Name &amp;quot;DockerNAT&amp;quot; -SwitchType Internal
+Get-NetAdapter &amp;quot;vEthernet (DockerNAT)&amp;quot; | New-NetIPAddress -AddressFamily IPv4 `
+      -IPAddress &amp;quot;10.0.75.1&amp;quot; -PrefixLength 24
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;A NAT object is created to handle Network Address Translation for the &amp;ldquo;10.0.75.0/24&amp;rdquo; subnet:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;New-NetNat –Name $SwitchName `
+	–InternalIPInterfaceAddressPrefix &amp;quot;10.0.75.0/24&amp;quot;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;&lt;strong&gt;Tip&lt;/strong&gt;: If any of these steps failed, ensure a Switch with the name &amp;ldquo;DockerNAT&amp;rdquo; was created, the IP was assigned to the Virtual Interface and that &lt;code&gt;Get-NetNat&lt;/code&gt; lists a NAT with the correct subnet. Also ensure these hard-coded subnets do not overlap with already existing interfaces (We had to manually fix these things while testing the beta).&lt;/p&gt;
+
+&lt;p&gt;Next, the &lt;code&gt;MobyLinuxVM&lt;/code&gt; Virtual Machine is created in Hyper-V. MobyLinuxVM uses an Alpine bootcd which has Hyper-V Integration Services, such as the &lt;code&gt;Key-Value Pair Exchange&lt;/code&gt; service (hv_kvp_daemon). The Hyper-V KVP Daemon allows communication between the Hyper-V Host and the Linux Guest (i.e to retrieve the Guest IP and send two-way messages as we&amp;rsquo;ll see later).&lt;/p&gt;
+
+&lt;p&gt;Finally, Docker bundles a &lt;code&gt;com.docker.proxy.exe&lt;/code&gt; binary which proxies the ports from the MobyLinuxVM on your windows host. At the time of writing (Docker Beta 7), this includes the DNS (port 53 TPC/UDP), DHCP (port 67 UDP) and Docker daemon (port 2375 TCP).&lt;/p&gt;
+
+&lt;p&gt;If you&amp;rsquo;ve been running alternative solutions for your Hyper-V set-up, you need to ensure the above ports are available as follows..&lt;/p&gt;
+
+&lt;p&gt;See if any process is using port 53:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;netstat -aon | findstr :53 
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Once you have the process id (&lt;code&gt;&amp;lt;pid&amp;gt;&lt;/code&gt;) of the process holding the port, get the name:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;tasklist /SVC | findstr &amp;lt;pid&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;The &lt;code&gt;com.docker.proxy.exe&lt;/code&gt; will proxy all DNS requests from the internal network of your Windows laptop to the DNS server used by your Windows host, effectively isolating the MobyLinuxVM from the network configuration changes as you move your laptop around.&lt;/p&gt;
+
+&lt;p&gt;To ensure this process can work properly, docker automatically creates &lt;code&gt;DockerTcp&lt;/code&gt; &amp;amp; &lt;code&gt;DockerUdp&lt;/code&gt; firewall rules and removes them when you close the client.&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;New-NetFirewallRule -Name &amp;quot;DockerTcp&amp;quot; -DisplayName &amp;quot;DockerTcp&amp;quot;  `
+   -Program &amp;quot;C:\&amp;lt;path&amp;gt;\&amp;lt;to&amp;gt;\com.docker.proxy.exe&amp;quot; -Protocol TCP `
+   -Profile Any -EdgeTraversalPolicy DeferToUser -Enabled True
+
+New-NetFirewallRule -Name &amp;quot;DockerUdp&amp;quot; -DisplayName &amp;quot;DockerUdp&amp;quot;  `
+   -Program &amp;quot;C:\&amp;lt;path&amp;gt;\&amp;lt;to&amp;gt;\com.docker.proxy.exe&amp;quot; -Protocol UDP `
+   -Profile Any -EdgeTraversalPolicy DeferToUser -Enabled True
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Having the Docker daemon port opened locally, allows your docker client to talk to localhost, however - it seems that going forward a named pipe solution will be used instead, if the VM was created successfully you should see the named pipe connected to its COM port:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;Get-VMComPort -VMName MobyLinuxVM | fl | Out-String
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;See also the docker client code for handling &lt;a href=&#34;https://github.com/docker/docker/blob/v1.11.0/vendor/src/github.com/docker/go-connections/sockets/sockets_windows.go&#34;&gt;Windows Named Pipes&lt;/a&gt; going forward.&lt;/p&gt;
+
+&lt;p&gt;If the MobyLinuxVM booted successfully, we may confirm the Hyper-V integration Services are running:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;Get-VMIntegrationService -VMName MobyLinuxVM -Name &amp;quot;Key-Value Pair Exchange&amp;quot;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;And that the &lt;code&gt;com.docker.proxy.exe&lt;/code&gt; DHCP service provided an IP to the VM - which we can query thanks to the Hyper-V Integration Services:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$(Get-VM MobyLinuxVM).NetworkAdapters[0]
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h2 id=&#34;troubleshooting:ebf9573d6838c40027746e9d7482622a&#34;&gt;Troubleshooting&lt;/h2&gt;
+
+&lt;p&gt;All settings are stored under &lt;code&gt;%APPDATA%\Docker\&lt;/code&gt; folder, this folder is replicated across machines in an Enterprise setting where Roaming is enabled.&lt;/p&gt;
+
+&lt;p&gt;All logs are stored under &lt;code&gt;%LOCALAPPDATA%\Docker\&lt;/code&gt; folder.&lt;/p&gt;
+
+&lt;p&gt;To monitor the latest logs use the following PowerShell command:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;gc $(gi $env:LocalAppData\Docker\* | sort LastAccessTime -Desc | select -First 1) -Wait
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;This will auto-refresh for every event written to the log.&lt;/p&gt;
+
+&lt;h2 id=&#34;docker-toolbox-migration:ebf9573d6838c40027746e9d7482622a&#34;&gt;Docker ToolBox Migration&lt;/h2&gt;
+
+&lt;p&gt;Switching on the Hyper-V role on Windows will disable VirtualBox (and you won&amp;rsquo;t be able to use the Docker ToolBox until you switch Hyper-V off &amp;amp; reboot). If a Docker Toolbox installation is detected, a migration path is offered (using &lt;code&gt;qemu-img&lt;/code&gt;). This will convert the &lt;code&gt;%USERPROFILE%\.docker\machine\machines\&amp;lt;machine-name&amp;gt;\disk.vmdk&lt;/code&gt; to vhdx:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;qemu-img.exe convert &amp;lt;path-to-vmdk&amp;gt; -O vhdx -o subformat=dynamic -p &amp;quot;C:\Users\Public\Documents\Hyper-V\Virtual hard disks\MobyLinuxVM.vhdx\&amp;quot;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;If you were already using Docker-Machine &amp;amp; Docker-Compose with Hyper-V, you can continue to do so side-by-side with the Docker for Windows client.&lt;/p&gt;
+
+&lt;h2 id=&#34;mounting-volumes:ebf9573d6838c40027746e9d7482622a&#34;&gt;Mounting Volumes&lt;/h2&gt;
+
+&lt;p&gt;One of the big improvements the new Docker for Windows promises is how Volume mounts will be handled.&lt;/p&gt;
+
+&lt;p&gt;A handy dialog is provided to streamline everything for us.&lt;/p&gt;
+
+
+&lt;figure &gt;
+    
+        &lt;img src=&#34;http://docker-saigon.github.io/img/beta7-shares.png&#34; alt=&#34;shares dialog&#34; /&gt;
+    
+    
+&lt;/figure&gt;
+
+
+&lt;p&gt;The current implementation will share the whole drive (and not individual folders). Enabling a Drive share will prompt for credentials.&lt;/p&gt;
+
+&lt;p&gt;Credentials are stored with the &lt;code&gt;target&lt;/code&gt; &amp;ldquo;Docker Host Filesystem Access&amp;rdquo; under the Windows &amp;gt; Control Panel &amp;gt; Credential Manager &amp;gt; Windows Credentials Store by the configuration tool. This uses &lt;code&gt;System.Security.Cryptography&lt;/code&gt; to encrypt the credentials with currentuser scope.&lt;/p&gt;
+
+&lt;p&gt;If the credential manager already contains credentials for the specified target, they will be overwritten.&lt;/p&gt;
+
+&lt;p&gt;Next, the drive is shared on the Windows Host:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;net share C=C:\ /grant:&amp;lt;username&amp;gt;,FULL /CACHE:None
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;This Samba share now needs to be mounted into the MobyLinuxVM and this is automated through the Hyper-V &lt;a href=&#34;https://technet.microsoft.com/en-us/library/dn798287.aspx&#34;&gt;Key-Value Pair Exchange&lt;/a&gt; Integration Service. A detailed explanation is available &lt;a href=&#34;http://dlafferty.blogspot.com.ee/2013/09/hyper-v-kvp-data-exchange-for-cloudstack.html&#34;&gt;here&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;The way this is supposed to work is as follows: our Windows host puts a &lt;code&gt;mount authentication token&lt;/code&gt; packaged in a &lt;code&gt;KvpExchangeDataItem&lt;/code&gt; on the VMBus:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;class Msvm_KvpExchangeDataItem : CIM_ManagedElement
+{
+  uint16 Source = 0;
+  string Name = &amp;quot;cifsmount&amp;quot;;
+  string Data = &amp;quot;authToken&amp;quot;;
+};
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;The Authentication token is a serialized string containing the mount points and mount options:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;/c;/C;username=&amp;lt;username&amp;gt;,password=&amp;lt;password&amp;gt;,noperm
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;On the Alpine guest the &lt;code&gt;hv_utils&lt;/code&gt; kernel driver module notifies the &lt;code&gt;hv_kvp_daemon&lt;/code&gt;. This daemon writes the kvp to the pool file (&lt;code&gt;/var/lib/hyperv/.kv_pool_*&lt;/code&gt;).&lt;/p&gt;
+
+&lt;p&gt;At this stage a process on MobyLinuxVM needs to make the directory and mount the share from the host - but this was failing at the time of writing:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt; #for both upper and lower case
+mount -t cifs //10.0.75.1/C /C -o username=&amp;lt;username&amp;gt;,password=&amp;lt;password&amp;gt;,noperm
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;If the share worked fine, our docker client would be sending any volume mount commands through the socket opened by the &lt;code&gt;com.docker.proxy.exe&lt;/code&gt;, this proxy re-writes the path if needed: &lt;code&gt;C:\Users\test\&lt;/code&gt; becomes &lt;code&gt;/C/Users/test&lt;/code&gt;, allowing us to mount Windows folders into our Docker containers.&lt;/p&gt;
+
+&lt;p&gt;However, there are still limitations due to the SMB protocol (lack of support for inotify and symlinks), which will cause problems with live reloads.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Troubleshooting&lt;/strong&gt;: We can verify that the auth token exists on the VMBus with the following PowerShell script:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$VmMgmt = Get-WmiObject -Namespace root\virtualization\v2 -Class ` 
+    Msvm_VirtualSystemManagementService
+$vm = Get-WmiObject -Namespace root\virtualization\v2 -Class ` 
+    Msvm_ComputerSystem -Filter {ElementName=&#39;MobyLinuxVM&#39;}
+
+($vm.GetRelated(&amp;quot;Msvm_KvpExchangeComponent&amp;quot;)[0] ` 
+    ).GetRelated(&amp;quot;Msvm_KvpExchangeComponentSettingData&amp;quot;).HostExchangeItems | % { ` 
+        $GuestExchangeItemXml = ([XML]$_).SelectSingleNode(` 
+            &amp;quot;/INSTANCE/PROPERTY[@NAME=&#39;Name&#39;]/VALUE[child::text() = &#39;cifsmount&#39;]&amp;quot;) 
+
+        if ($GuestExchangeItemXml -ne $null) 
+        { 
+           $GuestExchangeItemXml.SelectSingleNode(` 
+            &amp;quot;/INSTANCE/PROPERTY[@NAME=&#39;Data&#39;]/VALUE/child::text()&amp;quot;).Value 
+        }    
+    } 
+
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;So far, I have not been able to find which process is monitoring the &lt;code&gt;/var/lib/hyperv/.kv_pool_0&lt;/code&gt; files on the Alpine guest.&lt;/p&gt;
+
+&lt;h2 id=&#34;private-registries:ebf9573d6838c40027746e9d7482622a&#34;&gt;Private Registries&lt;/h2&gt;
+
+&lt;p&gt;At the moment, the beta for Windows does not support &lt;code&gt;DOCKER_OPTS&lt;/code&gt; or TLS certs &lt;strong&gt;yet&lt;/strong&gt;.&lt;/p&gt;
+
+&lt;p&gt;We can get root access to the MobyLinuxVM as follows:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt; #get a privileged container with access to Docker daemon
+docker run --privileged -it --rm -v /var/run/docker.sock:/var/run/docker.sock -v /usr/bin/docker:/usr/bin/docker alpine sh
+
+ #run a container with full root access to MobyLinuxVM and no seccomp profile (so you can mount stuff)
+docker run --net=host --ipc=host --uts=host --pid=host -it --security-opt=seccomp=unconfined --privileged --rm -v /:/host alpine /bin/sh
+
+ #switch to host FS
+chroot /host
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Poking around in the VM reveals the following:&lt;/p&gt;
+
+&lt;p&gt;The VM (Alpine-based) uses &lt;a href=&#34;http://wiki.alpinelinux.org/wiki/Alpine_Linux_Init_System&#34;&gt;OpenRC as its init system&lt;/a&gt;.&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;rc-status
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Shows the status of all services, but some of the init scripts do not implement status and show up as &amp;ldquo;crashed&amp;rdquo; while it seems their process is still running (&lt;code&gt;ps -a&lt;/code&gt;).&lt;/p&gt;
+
+&lt;p&gt;The Docker init script relies on a &lt;code&gt;/usr/bin/mobyconfig&lt;/code&gt; script. This &lt;code&gt;mobyconfig&lt;/code&gt; script requires the kernel to boot with a &lt;code&gt;com.docker.database&lt;/code&gt; label specifying the location of the config file or it bails. If the label is present - &lt;code&gt;/Database&lt;/code&gt; is mounted using the &lt;a href=&#34;https://en.wikipedia.org/wiki/9P_%28protocol%29&#34;&gt;Plan 9 Filesystem Protocol&lt;/a&gt;, which was the original filesystem for Docker for Mac.&lt;/p&gt;
+
+&lt;p&gt;The &lt;code&gt;mobyconfig&lt;/code&gt; script is able to retrieve network and &lt;code&gt;insecure-registry&lt;/code&gt; configuration for the Docker deamon or pick up a config file from &lt;code&gt;/etc/docker/daemon.json&lt;/code&gt;. This looks like a very promising solution, once it is fully implemented.&lt;/p&gt;
+
+&lt;p&gt;As the whole disk is a Temporary filesystem with only the &lt;code&gt;/var/&lt;/code&gt; mountpoint (to &lt;code&gt;/dev/sda2&lt;/code&gt;) persisted, changes made to any of the scripts are not persisted across reboots. It is possible to temporarily change the Docker options and &lt;code&gt;/etc/init.d/docker restart&lt;/code&gt; the daemon.&lt;/p&gt;
+
+&lt;h2 id=&#34;conclusion:ebf9573d6838c40027746e9d7482622a&#34;&gt;Conclusion&lt;/h2&gt;
+
+&lt;p&gt;Many improvements are coming with the Docker client for Windows, we are looking forward at testing the Docker client for Mac next.&lt;/p&gt;
+</description>
+    </item>
     
     <item>
       <title>Docker Caveats</title>
